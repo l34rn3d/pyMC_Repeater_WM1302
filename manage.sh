@@ -70,6 +70,26 @@ is_running() {
     systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1
 }
 
+# Function to build WM1302 library
+build_wm1302_library() {
+    local hal_dir="$1"
+
+    if [ ! -d "$hal_dir" ]; then
+        echo "    ✗ WM1302 HAL directory not found at $hal_dir"
+        return 1
+    fi
+
+    echo "    Building WM1302 library..."
+
+    if (cd "$hal_dir" && make clean && make all 2>&1) | grep -v "Entering directory\|Leaving directory"; then
+        echo "    ✓ WM1302 library built successfully"
+        return 0
+    else
+        echo "    ✗ WM1302 library build failed"
+        return 1
+    fi
+}
+
 # Function to get current version
 get_version() {
     if [ -f "$INSTALL_DIR/pyproject.toml" ]; then
@@ -224,6 +244,15 @@ install_repeater() {
     cp README.md "$INSTALL_DIR/"
     cp setup-radio-config.sh "$INSTALL_DIR/" 2>/dev/null || true
     cp radio-settings.json "$INSTALL_DIR/" 2>/dev/null || true
+
+    # Copy WM1302 support files if they exist
+    if [ -d "sx1302_hal" ]; then
+        echo "35"; echo "# Installing WM1302 support..."
+        cp -r sx1302_hal "$INSTALL_DIR/" 2>/dev/null || true
+    fi
+    if [ -d "docs" ]; then
+        cp -r docs "$INSTALL_DIR/" 2>/dev/null || true
+    fi
     
     echo "45"; echo "# Installing configuration..."
     cp config.yaml.example "$CONFIG_DIR/config.yaml.example"
@@ -361,6 +390,15 @@ upgrade_repeater() {
         cp pyproject.toml "$INSTALL_DIR/" 2>/dev/null || true
         cp README.md "$INSTALL_DIR/" 2>/dev/null || true
         cp pymc-repeater.service /etc/systemd/system/ 2>/dev/null || true
+
+        # Copy WM1302 support files if they exist
+        if [ -d "sx1302_hal" ]; then
+            cp -r sx1302_hal "$INSTALL_DIR/" 2>/dev/null || true
+        fi
+        if [ -d "docs" ]; then
+            cp -r docs "$INSTALL_DIR/" 2>/dev/null || true
+        fi
+
         echo "    ✓ Files updated"
         
         echo "[5/9] Validating and updating configuration..."

@@ -1,5 +1,10 @@
 # Default Repeater Configuration
 
+# Radio hardware type: "sx1262" or "wm1302"
+# Use sx1262 for standard LoRa transceivers (Waveshare, etc)
+# Use wm1302 for WM1302 concentrator module
+radio_type: "sx1262"
+
 repeater:
   # Node name for logging and identification
   node_name: "mesh-repeater-01"
@@ -98,6 +103,15 @@ sx1262:
 
   # Waveshare hardware flag
   is_waveshare: false
+
+# WM1302 Concentrator Configuration
+# Only used when radio_type is "wm1302"
+wm1302:
+  # SPI device path
+  com_path: "/dev/spidev0.0"
+
+  # Note: TX power for WM1302 is set in the radio section above
+  # WM1302 supports up to 26 dBm (EU868) / 25 dBm (US915)
 
 delays:
   # TX delay factor for flood mode (multiplier)

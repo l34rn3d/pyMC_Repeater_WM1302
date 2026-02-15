@@ -32,6 +32,16 @@ The repeater daemon runs continuously as a background process, forwarding LoRa p
 
 The following hardware is currently supported out-of-the-box:
 
+WM1302 LoRa Concentrator
+
+    Hardware: WM1302/SX1302 LoRa concentrator (gateway-class hardware)
+    Platform: Raspberry Pi (or compatible single-board computer)
+    Frequency: Any LoRa frequency (configurable)
+    TX Power: Up to 26dBm (EU868) / 25dBm (US915)
+    Interface: SPI (SPI0 default)
+    Note: Higher performance than standard transceivers - better sensitivity and TX power
+    Installation Guide: See INSTALL_WM1302.md
+
 Waveshare LoRaWAN/GNSS HAT (SPI Version Only)
 
     Hardware: Waveshare SX1262 LoRa HAT (SPI interface - UART version not supported)

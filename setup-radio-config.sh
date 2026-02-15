@@ -205,84 +205,140 @@ hw_config=$(jq ".hardware.\"$hw_key\"" "$HARDWARE_CONFIG" 2>/dev/null)
 if [ -z "$hw_config" ] || [ "$hw_config" == "null" ]; then
     echo "Warning: Could not extract hardware config from JSON, using defaults"
 else
-    # Extract each field and update config.yaml
-    bus_id=$(echo "$hw_config" | jq -r '.bus_id // empty')
-    cs_id=$(echo "$hw_config" | jq -r '.cs_id // empty')
-    cs_pin=$(echo "$hw_config" | jq -r '.cs_pin // empty')
-    reset_pin=$(echo "$hw_config" | jq -r '.reset_pin // empty')
-    busy_pin=$(echo "$hw_config" | jq -r '.busy_pin // empty')
-    irq_pin=$(echo "$hw_config" | jq -r '.irq_pin // empty')
-    txen_pin=$(echo "$hw_config" | jq -r '.txen_pin // empty')
-    rxen_pin=$(echo "$hw_config" | jq -r '.rxen_pin // empty')
-    txled_pin=$(echo "$hw_config" | jq -r '.txled_pin // empty')
-    rxled_pin=$(echo "$hw_config" | jq -r '.rxled_pin // empty')
+    # Check hardware type to determine which config section to update
+    hardware_type=$(echo "$hw_config" | jq -r '.hardware_type // empty')
+
+    # Extract common fields
     tx_power=$(echo "$hw_config" | jq -r '.tx_power // empty')
     preamble_length=$(echo "$hw_config" | jq -r '.preamble_length // empty')
-    is_waveshare=$(echo "$hw_config" | jq -r '.is_waveshare // empty')
-    use_dio3_tcxo=$(echo "$hw_config" | jq -r '.use_dio3_tcxo // empty')
 
-    # Update sx1262 section in config.yaml (2-space indentation)
-    [ -n "$bus_id" ] && sed "${SED_OPTS[@]}" "s/^  bus_id:.*/  bus_id: $bus_id/" "$CONFIG_FILE"
-    [ -n "$cs_id" ] && sed "${SED_OPTS[@]}" "s/^  cs_id:.*/  cs_id: $cs_id/" "$CONFIG_FILE"
-    [ -n "$cs_pin" ] && sed "${SED_OPTS[@]}" "s/^  cs_pin:.*/  cs_pin: $cs_pin/" "$CONFIG_FILE"
-    [ -n "$reset_pin" ] && sed "${SED_OPTS[@]}" "s/^  reset_pin:.*/  reset_pin: $reset_pin/" "$CONFIG_FILE"
-    [ -n "$busy_pin" ] && sed "${SED_OPTS[@]}" "s/^  busy_pin:.*/  busy_pin: $busy_pin/" "$CONFIG_FILE"
-    [ -n "$irq_pin" ] && sed "${SED_OPTS[@]}" "s/^  irq_pin:.*/  irq_pin: $irq_pin/" "$CONFIG_FILE"
-    [ -n "$txen_pin" ] && sed "${SED_OPTS[@]}" "s/^  txen_pin:.*/  txen_pin: $txen_pin/" "$CONFIG_FILE"
-    [ -n "$rxen_pin" ] && sed "${SED_OPTS[@]}" "s/^  rxen_pin:.*/  rxen_pin: $rxen_pin/" "$CONFIG_FILE"
-    
-    # Handle LED pins - add if missing, update if present
-    if [ -n "$txled_pin" ]; then
-        if grep -q "^  txled_pin:" "$CONFIG_FILE"; then
-            sed "${SED_OPTS[@]}" "s/^  txled_pin:.*/  txled_pin: $txled_pin/" "$CONFIG_FILE"
-        else
-            # Add txled_pin after rxen_pin
-            sed "${SED_OPTS[@]}" "/^  rxen_pin:.*/a\\  txled_pin: $txled_pin" "$CONFIG_FILE"
-        fi
-    fi
-    
-    if [ -n "$rxled_pin" ]; then
-        if grep -q "^  rxled_pin:" "$CONFIG_FILE"; then
-            sed "${SED_OPTS[@]}" "s/^  rxled_pin:.*/  rxled_pin: $rxled_pin/" "$CONFIG_FILE"
-        else
-            # Add rxled_pin after txled_pin
-            sed "${SED_OPTS[@]}" "/^  txled_pin:.*/a\\  rxled_pin: $rxled_pin" "$CONFIG_FILE"
-        fi
-    fi
-    
+    # Update common radio settings
     [ -n "$tx_power" ] && sed "${SED_OPTS[@]}" "s/^  tx_power:.*/  tx_power: $tx_power/" "$CONFIG_FILE"
     [ -n "$preamble_length" ] && sed "${SED_OPTS[@]}" "s/^  preamble_length:.*/  preamble_length: $preamble_length/" "$CONFIG_FILE"
 
-    # Update is_waveshare flag
-    if [ "$is_waveshare" == "true" ]; then
-        sed "${SED_OPTS[@]}" "s/^  is_waveshare:.*/  is_waveshare: true/" "$CONFIG_FILE"
-    else
-        sed "${SED_OPTS[@]}" "s/^  is_waveshare:.*/  is_waveshare: false/" "$CONFIG_FILE"
-    fi
+    if [ "$hardware_type" == "sx1302" ]; then
+        echo "Detected WM1302/SX1302 concentrator hardware"
 
-    # Update use_dio3_tcxo flag
-    if [ "$use_dio3_tcxo" == "true" ]; then
-        if grep -q "^  use_dio3_tcxo:" "$CONFIG_FILE"; then
-            sed "${SED_OPTS[@]}" "s/^  use_dio3_tcxo:.*/  use_dio3_tcxo: true/" "$CONFIG_FILE"
-        else
-            # Add use_dio3_tcxo after rxled_pin (or rxen_pin if no LED pins)
-            if grep -q "^  rxled_pin:" "$CONFIG_FILE"; then
-                sed "${SED_OPTS[@]}" "/^  rxled_pin:.*/a\\  use_dio3_tcxo: true" "$CONFIG_FILE"
+        # Update radio_type to wm1302
+        sed "${SED_OPTS[@]}" "s/^radio_type:.*/radio_type: \"wm1302\"/" "$CONFIG_FILE"
+
+        # Build WM1302 library if sx1302_hal directory exists
+        HAL_DIR_INSTALL="/opt/pymc_repeater/sx1302_hal"
+        HAL_DIR_LOCAL="$SCRIPT_DIR/sx1302_hal"
+
+        if [ -d "$HAL_DIR_INSTALL" ]; then
+            echo ""
+            echo "Building WM1302 library..."
+            if (cd "$HAL_DIR_INSTALL" && make clean >/dev/null 2>&1 && make all 2>&1) | tail -5; then
+                echo "✓ WM1302 library built successfully"
             else
-                sed "${SED_OPTS[@]}" "/^  rxen_pin:.*/a\\  use_dio3_tcxo: true" "$CONFIG_FILE"
+                echo "⚠ WM1302 library build failed (non-fatal)"
+            fi
+            echo ""
+        elif [ -d "$HAL_DIR_LOCAL" ]; then
+            echo ""
+            echo "Building WM1302 library..."
+            if (cd "$HAL_DIR_LOCAL" && make clean >/dev/null 2>&1 && make all 2>&1) | tail -5; then
+                echo "✓ WM1302 library built successfully"
+            else
+                echo "⚠ WM1302 library build failed (non-fatal)"
+            fi
+            echo ""
+        fi
+
+        # Extract WM1302-specific fields
+        com_path=$(echo "$hw_config" | jq -r '.com_path // empty')
+
+        # Update wm1302 section
+        if [ -n "$com_path" ]; then
+            sed "${SED_OPTS[@]}" "s|^  com_path:.*|  com_path: \"$com_path\"|" "$CONFIG_FILE"
+        fi
+
+        echo "  Hardware Type: SX1302 Concentrator"
+        echo "  SPI Device: $com_path"
+
+    else
+        echo "Detected SX1262 transceiver hardware"
+
+        # Update radio_type to sx1262
+        sed "${SED_OPTS[@]}" "s/^radio_type:.*/radio_type: \"sx1262\"/" "$CONFIG_FILE"
+
+        # Extract SX1262-specific fields
+        bus_id=$(echo "$hw_config" | jq -r '.bus_id // empty')
+        cs_id=$(echo "$hw_config" | jq -r '.cs_id // empty')
+        cs_pin=$(echo "$hw_config" | jq -r '.cs_pin // empty')
+        reset_pin=$(echo "$hw_config" | jq -r '.reset_pin // empty')
+        busy_pin=$(echo "$hw_config" | jq -r '.busy_pin // empty')
+        irq_pin=$(echo "$hw_config" | jq -r '.irq_pin // empty')
+        txen_pin=$(echo "$hw_config" | jq -r '.txen_pin // empty')
+        rxen_pin=$(echo "$hw_config" | jq -r '.rxen_pin // empty')
+        txled_pin=$(echo "$hw_config" | jq -r '.txled_pin // empty')
+        rxled_pin=$(echo "$hw_config" | jq -r '.rxled_pin // empty')
+        is_waveshare=$(echo "$hw_config" | jq -r '.is_waveshare // empty')
+        use_dio3_tcxo=$(echo "$hw_config" | jq -r '.use_dio3_tcxo // empty')
+
+        # Update sx1262 section in config.yaml (2-space indentation)
+        [ -n "$bus_id" ] && sed "${SED_OPTS[@]}" "s/^  bus_id:.*/  bus_id: $bus_id/" "$CONFIG_FILE"
+        [ -n "$cs_id" ] && sed "${SED_OPTS[@]}" "s/^  cs_id:.*/  cs_id: $cs_id/" "$CONFIG_FILE"
+        [ -n "$cs_pin" ] && sed "${SED_OPTS[@]}" "s/^  cs_pin:.*/  cs_pin: $cs_pin/" "$CONFIG_FILE"
+        [ -n "$reset_pin" ] && sed "${SED_OPTS[@]}" "s/^  reset_pin:.*/  reset_pin: $reset_pin/" "$CONFIG_FILE"
+        [ -n "$busy_pin" ] && sed "${SED_OPTS[@]}" "s/^  busy_pin:.*/  busy_pin: $busy_pin/" "$CONFIG_FILE"
+        [ -n "$irq_pin" ] && sed "${SED_OPTS[@]}" "s/^  irq_pin:.*/  irq_pin: $irq_pin/" "$CONFIG_FILE"
+        [ -n "$txen_pin" ] && sed "${SED_OPTS[@]}" "s/^  txen_pin:.*/  txen_pin: $txen_pin/" "$CONFIG_FILE"
+        [ -n "$rxen_pin" ] && sed "${SED_OPTS[@]}" "s/^  rxen_pin:.*/  rxen_pin: $rxen_pin/" "$CONFIG_FILE"
+
+        # Handle LED pins - add if missing, update if present
+        if [ -n "$txled_pin" ]; then
+            if grep -q "^  txled_pin:" "$CONFIG_FILE"; then
+                sed "${SED_OPTS[@]}" "s/^  txled_pin:.*/  txled_pin: $txled_pin/" "$CONFIG_FILE"
+            else
+                # Add txled_pin after rxen_pin
+                sed "${SED_OPTS[@]}" "/^  rxen_pin:.*/a\\  txled_pin: $txled_pin" "$CONFIG_FILE"
             fi
         fi
-    elif [ "$use_dio3_tcxo" == "false" ]; then
-        if grep -q "^  use_dio3_tcxo:" "$CONFIG_FILE"; then
-            sed "${SED_OPTS[@]}" "s/^  use_dio3_tcxo:.*/  use_dio3_tcxo: false/" "$CONFIG_FILE"
-        else
-            # Add use_dio3_tcxo after rxled_pin (or rxen_pin if no LED pins)
+
+        if [ -n "$rxled_pin" ]; then
             if grep -q "^  rxled_pin:" "$CONFIG_FILE"; then
-                sed "${SED_OPTS[@]}" "/^  rxled_pin:.*/a\\  use_dio3_tcxo: false" "$CONFIG_FILE"
+                sed "${SED_OPTS[@]}" "s/^  rxled_pin:.*/  rxled_pin: $rxled_pin/" "$CONFIG_FILE"
             else
-                sed "${SED_OPTS[@]}" "/^  rxen_pin:.*/a\\  use_dio3_tcxo: false" "$CONFIG_FILE"
+                # Add rxled_pin after txled_pin
+                sed "${SED_OPTS[@]}" "/^  txled_pin:.*/a\\  rxled_pin: $rxled_pin" "$CONFIG_FILE"
             fi
         fi
+
+        # Update is_waveshare flag
+        if [ "$is_waveshare" == "true" ]; then
+            sed "${SED_OPTS[@]}" "s/^  is_waveshare:.*/  is_waveshare: true/" "$CONFIG_FILE"
+        else
+            sed "${SED_OPTS[@]}" "s/^  is_waveshare:.*/  is_waveshare: false/" "$CONFIG_FILE"
+        fi
+
+        # Update use_dio3_tcxo flag
+        if [ "$use_dio3_tcxo" == "true" ]; then
+            if grep -q "^  use_dio3_tcxo:" "$CONFIG_FILE"; then
+                sed "${SED_OPTS[@]}" "s/^  use_dio3_tcxo:.*/  use_dio3_tcxo: true/" "$CONFIG_FILE"
+            else
+                # Add use_dio3_tcxo after rxled_pin (or rxen_pin if no LED pins)
+                if grep -q "^  rxled_pin:" "$CONFIG_FILE"; then
+                    sed "${SED_OPTS[@]}" "/^  rxled_pin:.*/a\\  use_dio3_tcxo: true" "$CONFIG_FILE"
+                else
+                    sed "${SED_OPTS[@]}" "/^  rxen_pin:.*/a\\  use_dio3_tcxo: true" "$CONFIG_FILE"
+                fi
+            fi
+        elif [ "$use_dio3_tcxo" == "false" ]; then
+            if grep -q "^  use_dio3_tcxo:" "$CONFIG_FILE"; then
+                sed "${SED_OPTS[@]}" "s/^  use_dio3_tcxo:.*/  use_dio3_tcxo: false/" "$CONFIG_FILE"
+            else
+                # Add use_dio3_tcxo after rxled_pin (or rxen_pin if no LED pins)
+                if grep -q "^  rxled_pin:" "$CONFIG_FILE"; then
+                    sed "${SED_OPTS[@]}" "/^  rxled_pin:.*/a\\  use_dio3_tcxo: false" "$CONFIG_FILE"
+                else
+                    sed "${SED_OPTS[@]}" "/^  rxen_pin:.*/a\\  use_dio3_tcxo: false" "$CONFIG_FILE"
+                fi
+            fi
+        fi
+
+        echo "  Hardware Type: SX1262 Transceiver"
     fi
 fi
 
@@ -299,8 +355,14 @@ echo "  Spreading Factor: $sf"
 echo "  Bandwidth: ${bw}kHz (${bw_hz}Hz)"
 echo "  Coding Rate: $cr"
 echo ""
-echo "Hardware GPIO Configuration:"
-if [ -n "$bus_id" ]; then
+echo "Hardware Configuration:"
+if [ "$hardware_type" == "sx1302" ]; then
+    echo "  Type: WM1302/SX1302 Concentrator"
+    [ -n "$com_path" ] && echo "  SPI Device: $com_path"
+    echo "  TX Power: $tx_power dBm"
+    echo "  Preamble Length: $preamble_length"
+elif [ -n "$bus_id" ]; then
+    echo "  Type: SX1262 Transceiver"
     echo "  Bus ID: $bus_id"
     echo "  Chip Select: $cs_id (pin $cs_pin)"
     echo "  Reset Pin: $reset_pin"

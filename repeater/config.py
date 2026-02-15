@@ -244,5 +244,42 @@ def get_radio_for_board(board_config: dict):
 
         return radio
 
+    elif radio_type in ("sx1302", "wm1302"):
+        from repeater.hardware.wm1302_wrapper import WM1302Radio
+
+        # Get WM1302 configuration
+        wm1302_config = board_config.get("wm1302")
+        if not wm1302_config:
+            raise ValueError("Missing 'wm1302' section in configuration file")
+
+        radio_config = board_config.get("radio")
+        if not radio_config:
+            raise ValueError("Missing 'radio' section in configuration file")
+
+        # Build config for WM1302
+        combined_config = {
+            "com_path": wm1302_config.get("com_path", b"/dev/spidev0.0"),
+            "frequency": int(radio_config["frequency"]),
+            "tx_power": radio_config.get("tx_power", 26),
+            "spreading_factor": radio_config["spreading_factor"],
+            "bandwidth": int(radio_config["bandwidth"]),
+            "coding_rate": radio_config["coding_rate"],
+            "preamble_length": radio_config.get("preamble_length", 17),
+            "sync_word": radio_config["sync_word"],
+        }
+
+        # Ensure com_path is bytes
+        if isinstance(combined_config["com_path"], str):
+            combined_config["com_path"] = combined_config["com_path"].encode()
+
+        radio = WM1302Radio.get_instance(**combined_config)
+
+        try:
+            radio.begin()
+        except RuntimeError as e:
+            raise RuntimeError(f"Failed to initialize WM1302 concentrator: {e}") from e
+
+        return radio
+
     else:
-        raise RuntimeError(f"Unknown radio type: {radio_type}. Supported: sx1262")
+        raise RuntimeError(f"Unknown radio type: {radio_type}. Supported: sx1262, sx1302, wm1302")
