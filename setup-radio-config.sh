@@ -253,8 +253,25 @@ else
         if [ -d "$HAL_DIR" ]; then
             echo ""
             echo "Building WM1302 library..."
-            if (cd "$HAL_DIR" && make clean >/dev/null 2>&1 && make all 2>&1) | tail -5; then
-                echo "✓ WM1302 library built successfully"
+
+            # Build libtools first
+            if ! (cd "$HAL_DIR/libtools" && make clean >/dev/null 2>&1 && make all >/dev/null 2>&1); then
+                echo "✗ Failed to build libtools"
+            fi
+
+            # Build libloragw with -fPIC for shared library support
+            if (cd "$HAL_DIR/libloragw" && \
+                make clean >/dev/null 2>&1 && \
+                make CFLAGS="-O2 -Wall -fPIC -Iinc -I../libtools/inc" all 2>&1) | tail -5; then
+
+                # Create shared library (.so) from static library (.a)
+                echo "Creating shared library..."
+                if (cd "$HAL_DIR/libloragw" && \
+                    gcc -shared -o libloragw.so -Wl,--whole-archive libloragw.a -Wl,--no-whole-archive -L../libtools -ltinymt32 -lrt -lm 2>&1) | tail -3; then
+                    echo "✓ WM1302 library built successfully"
+                else
+                    echo "✗ Failed to create shared library"
+                fi
             else
                 echo "✗ WM1302 library build failed"
                 echo "  Please check build dependencies (gcc, make)"
