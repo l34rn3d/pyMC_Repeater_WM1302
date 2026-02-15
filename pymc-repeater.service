@@ -1,7 +1,5 @@
-"""
-Systemd service file template for  Py MC - Meshcore Repeater Daemon.
-Install as /etc/systemd/system/pymc-repeater.service
-"""
+# Systemd service file for pyMC Repeater Daemon
+# Install as /etc/systemd/system/pymc-repeater.service
 
 [Unit]
 Description=pyMC Repeater Daemon
