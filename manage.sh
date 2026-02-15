@@ -259,7 +259,16 @@ install_repeater() {
     if [ ! -f "$CONFIG_DIR/config.yaml" ]; then
         cp config.yaml.example "$CONFIG_DIR/config.yaml"
     fi
-    
+
+    echo "50"; echo "# Building WM1302 library if present..."
+    if [ -d "$INSTALL_DIR/sx1302_hal" ]; then
+        if build_wm1302_library "$INSTALL_DIR/sx1302_hal" > /dev/null 2>&1; then
+            echo "    ✓ WM1302 library built"
+        else
+            echo "    ⚠ WM1302 library build failed (will retry during radio config)"
+        fi
+    fi
+
     echo "55"; echo "# Installing systemd service..."
     cp pymc-repeater.service /etc/systemd/system/
     systemctl daemon-reload
