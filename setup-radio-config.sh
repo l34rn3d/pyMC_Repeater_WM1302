@@ -226,21 +226,26 @@ else
         HAL_DIR_INSTALL="/opt/pymc_repeater/sx1302_hal"
         HAL_DIR_LOCAL="$SCRIPT_DIR/sx1302_hal"
 
-        # Determine which directory to use
-        if [ -d "$HAL_DIR_INSTALL" ]; then
+        # Determine which directory to use (check for Makefile, not just directory)
+        if [ -f "$HAL_DIR_INSTALL/Makefile" ]; then
             HAL_DIR="$HAL_DIR_INSTALL"
-        elif [ -d "$HAL_DIR_LOCAL" ]; then
+        elif [ -f "$HAL_DIR_LOCAL/Makefile" ]; then
             HAL_DIR="$HAL_DIR_LOCAL"
         else
-            # Clone from upstream if doesn't exist
+            # Clone from upstream if doesn't exist or is broken
             echo ""
             echo "Cloning WM1302 HAL library from upstream..."
+
+            # Remove broken directory if it exists
+            [ -d "$HAL_DIR_INSTALL" ] && rm -rf "$HAL_DIR_INSTALL"
+
             HAL_DIR="$HAL_DIR_INSTALL"
-            if git clone --depth 1 --quiet https://github.com/Lora-net/sx1302_hal.git "$HAL_DIR"; then
+            if git clone --depth 1 --quiet https://github.com/Lora-net/sx1302_hal.git "$HAL_DIR" 2>&1; then
                 echo "✓ WM1302 library cloned successfully"
             else
                 echo "✗ Failed to clone WM1302 library"
-                echo "  You may need to install it manually"
+                echo "  Please check network connection and git installation"
+                echo "  Or clone manually: git clone https://github.com/Lora-net/sx1302_hal.git $HAL_DIR"
             fi
         fi
 
