@@ -245,28 +245,14 @@ install_repeater() {
     cp setup-radio-config.sh "$INSTALL_DIR/" 2>/dev/null || true
     cp radio-settings.json "$INSTALL_DIR/" 2>/dev/null || true
 
-    # Copy WM1302 support files if they exist
-    if [ -d "sx1302_hal" ]; then
-        echo "35"; echo "# Installing WM1302 support..."
-        cp -r sx1302_hal "$INSTALL_DIR/" 2>/dev/null || true
-    fi
     if [ -d "docs" ]; then
         cp -r docs "$INSTALL_DIR/" 2>/dev/null || true
     fi
-    
+
     echo "45"; echo "# Installing configuration..."
     cp config.yaml.example "$CONFIG_DIR/config.yaml.example"
     if [ ! -f "$CONFIG_DIR/config.yaml" ]; then
         cp config.yaml.example "$CONFIG_DIR/config.yaml"
-    fi
-
-    echo "50"; echo "# Building WM1302 library if present..."
-    if [ -d "$INSTALL_DIR/sx1302_hal" ]; then
-        if build_wm1302_library "$INSTALL_DIR/sx1302_hal" > /dev/null 2>&1; then
-            echo "    ✓ WM1302 library built"
-        else
-            echo "    ⚠ WM1302 library build failed (will retry during radio config)"
-        fi
     fi
 
     echo "55"; echo "# Installing systemd service..."
@@ -400,10 +386,6 @@ upgrade_repeater() {
         cp README.md "$INSTALL_DIR/" 2>/dev/null || true
         cp pymc-repeater.service /etc/systemd/system/ 2>/dev/null || true
 
-        # Copy WM1302 support files if they exist
-        if [ -d "sx1302_hal" ]; then
-            cp -r sx1302_hal "$INSTALL_DIR/" 2>/dev/null || true
-        fi
         if [ -d "docs" ]; then
             cp -r docs "$INSTALL_DIR/" 2>/dev/null || true
         fi

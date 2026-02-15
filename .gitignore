@@ -48,3 +48,4 @@ identity.json
 # Logs
 *.log
 .DS_Store
+sx1302_hal/

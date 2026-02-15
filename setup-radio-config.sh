@@ -222,26 +222,37 @@ else
         # Update radio_type to wm1302
         sed "${SED_OPTS[@]}" "s/^radio_type:.*/radio_type: \"wm1302\"/" "$CONFIG_FILE"
 
-        # Build WM1302 library if sx1302_hal directory exists
+        # Clone and build WM1302 library
         HAL_DIR_INSTALL="/opt/pymc_repeater/sx1302_hal"
         HAL_DIR_LOCAL="$SCRIPT_DIR/sx1302_hal"
 
+        # Determine which directory to use
         if [ -d "$HAL_DIR_INSTALL" ]; then
-            echo ""
-            echo "Building WM1302 library..."
-            if (cd "$HAL_DIR_INSTALL" && make clean >/dev/null 2>&1 && make all 2>&1) | tail -5; then
-                echo "✓ WM1302 library built successfully"
-            else
-                echo "⚠ WM1302 library build failed (non-fatal)"
-            fi
-            echo ""
+            HAL_DIR="$HAL_DIR_INSTALL"
         elif [ -d "$HAL_DIR_LOCAL" ]; then
+            HAL_DIR="$HAL_DIR_LOCAL"
+        else
+            # Clone from upstream if doesn't exist
+            echo ""
+            echo "Cloning WM1302 HAL library from upstream..."
+            HAL_DIR="$HAL_DIR_INSTALL"
+            if git clone --depth 1 --quiet https://github.com/Lora-net/sx1302_hal.git "$HAL_DIR"; then
+                echo "✓ WM1302 library cloned successfully"
+            else
+                echo "✗ Failed to clone WM1302 library"
+                echo "  You may need to install it manually"
+            fi
+        fi
+
+        # Build the library
+        if [ -d "$HAL_DIR" ]; then
             echo ""
             echo "Building WM1302 library..."
-            if (cd "$HAL_DIR_LOCAL" && make clean >/dev/null 2>&1 && make all 2>&1) | tail -5; then
+            if (cd "$HAL_DIR" && make clean >/dev/null 2>&1 && make all 2>&1) | tail -5; then
                 echo "✓ WM1302 library built successfully"
             else
-                echo "⚠ WM1302 library build failed (non-fatal)"
+                echo "✗ WM1302 library build failed"
+                echo "  Please check build dependencies (gcc, make)"
             fi
             echo ""
         fi
