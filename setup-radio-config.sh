@@ -6,6 +6,50 @@ CONFIG_FILE="$CONFIG_DIR/config.yaml"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HARDWARE_CONFIG="$SCRIPT_DIR/radio-settings.json"
 
+# Create GPIO reset script using pinctrl (compatible with Bookworm and Trixie)
+create_reset_script() {
+    local hal_dir="$1"
+    local reset_script="$hal_dir/libloragw/reset_lgw.sh"
+
+    if [ -f "$reset_script" ]; then
+        echo "    ✓ reset_lgw.sh already exists"
+        return 0
+    fi
+
+    cat > "$reset_script" << 'RESET_EOF'
+#!/bin/bash
+# WM1302 GPIO reset sequence
+# Compatible with Raspberry Pi OS Bookworm and Trixie (uses pinctrl)
+# GPIO pins: 18=POWER_EN, 17=SX1302_RESET, 5=SX1261_RESET, 13=ADC_RESET
+
+set -e
+
+if ! command -v pinctrl &>/dev/null; then
+    echo "Error: pinctrl not found" >&2
+    exit 1
+fi
+
+pinctrl set 18 op dh
+sleep 0.01
+pinctrl set 17 op dh
+sleep 0.01
+pinctrl set 17 dl
+sleep 0.01
+pinctrl set 5 op dl
+sleep 0.01
+pinctrl set 5 dh
+sleep 0.01
+pinctrl set 13 op dl
+sleep 0.01
+pinctrl set 13 dh
+sleep 0.5
+exit 0
+RESET_EOF
+
+    chmod +x "$reset_script"
+    echo "    ✓ reset_lgw.sh created"
+}
+
 # Detect OS and set appropriate sed parameters
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
@@ -247,6 +291,11 @@ else
                 echo "  Please check network connection and git installation"
                 echo "  Or clone manually: git clone https://github.com/Lora-net/sx1302_hal.git $HAL_DIR"
             fi
+        fi
+
+        # Create reset script before build
+        if [ -d "$HAL_DIR" ]; then
+            create_reset_script "$HAL_DIR"
         fi
 
         # Build the library
