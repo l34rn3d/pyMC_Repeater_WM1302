@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ```bash
 # Clone and switch to dev
-git clone https://github.com/rightup/pyMC_Repeater.git
+git clone https://github.com/l34rn3d/pyMC_Repeater_WM1302.git
 cd pyMC_Repeater
 git checkout dev
 
@@ -165,7 +165,7 @@ No configuration changes needed. Your existing config.yaml will continue to work
 
 **For new WM1302 installations:**
 ```bash
-git clone https://github.com/rightup/pyMC_Repeater.git
+git clone https://github.com/l34rn3d/pyMC_Repeater_WM1302.git
 cd pyMC_Repeater
 sudo ./manage.sh
 # Select "install"
