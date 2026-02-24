@@ -94,8 +94,8 @@
       "use_dio3_tcxo": true,
       "preamble_length": 17
     },
-    "wm1302": {
-      "name": "WM1302 LoRa Concentrator",
+    "sx1302": {
+      "name": "SX1302 LoRa Concentrator",
       "hardware_type": "sx1302",
       "com_path": "/dev/spidev0.0",
       "tx_power": 26,

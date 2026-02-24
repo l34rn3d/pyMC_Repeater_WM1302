@@ -70,22 +70,22 @@ is_running() {
     systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1
 }
 
-# Function to build WM1302 library
-build_wm1302_library() {
+# Function to build SX1302 library
+build_sx1302_library() {
     local hal_dir="$1"
 
     if [ ! -d "$hal_dir" ]; then
-        echo "    ✗ WM1302 HAL directory not found at $hal_dir"
+        echo "    ✗ SX1302 HAL directory not found at $hal_dir"
         return 1
     fi
 
-    echo "    Building WM1302 library..."
+    echo "    Building SX1302 library..."
 
     if (cd "$hal_dir" && make clean && make all 2>&1) | grep -v "Entering directory\|Leaving directory"; then
-        echo "    ✓ WM1302 library built successfully"
+        echo "    ✓ SX1302 library built successfully"
         return 0
     else
-        echo "    ✗ WM1302 library build failed"
+        echo "    ✗ SX1302 library build failed"
         return 1
     fi
 }

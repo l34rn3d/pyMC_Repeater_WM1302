@@ -18,7 +18,7 @@ create_reset_script() {
 
     cat > "$reset_script" << 'RESET_EOF'
 #!/bin/bash
-# WM1302 GPIO reset sequence
+# SX1302 GPIO reset sequence
 # Compatible with Raspberry Pi OS Bookworm and Trixie (uses pinctrl)
 # GPIO pins: 18=POWER_EN, 17=SX1302_RESET, 5=SX1261_RESET, 13=ADC_RESET
 
@@ -261,12 +261,12 @@ else
     [ -n "$preamble_length" ] && sed "${SED_OPTS[@]}" "s/^  preamble_length:.*/  preamble_length: $preamble_length/" "$CONFIG_FILE"
 
     if [ "$hardware_type" == "sx1302" ]; then
-        echo "Detected WM1302/SX1302 concentrator hardware"
+        echo "Detected SX1302 concentrator hardware"
 
-        # Update radio_type to wm1302
-        sed "${SED_OPTS[@]}" "s/^radio_type:.*/radio_type: \"wm1302\"/" "$CONFIG_FILE"
+        # Update radio_type to sx1302
+        sed "${SED_OPTS[@]}" "s/^radio_type:.*/radio_type: \"sx1302\"/" "$CONFIG_FILE"
 
-        # Clone and build WM1302 library
+        # Clone and build SX1302 library
         HAL_DIR_INSTALL="/opt/pymc_repeater/sx1302_hal"
         HAL_DIR_LOCAL="$SCRIPT_DIR/sx1302_hal"
 
@@ -278,16 +278,16 @@ else
         else
             # Clone from upstream if doesn't exist or is broken
             echo ""
-            echo "Cloning WM1302 HAL library from upstream..."
+            echo "Cloning SX1302 HAL library from upstream..."
 
             # Remove broken directory if it exists
             [ -d "$HAL_DIR_INSTALL" ] && rm -rf "$HAL_DIR_INSTALL"
 
             HAL_DIR="$HAL_DIR_INSTALL"
             if git clone --depth 1 --quiet https://github.com/Lora-net/sx1302_hal.git "$HAL_DIR" 2>&1; then
-                echo "✓ WM1302 library cloned successfully"
+                echo "✓ SX1302 library cloned successfully"
             else
-                echo "✗ Failed to clone WM1302 library"
+                echo "✗ Failed to clone SX1302 library"
                 echo "  Please check network connection and git installation"
                 echo "  Or clone manually: git clone https://github.com/Lora-net/sx1302_hal.git $HAL_DIR"
             fi
@@ -301,7 +301,7 @@ else
         # Build the library
         if [ -d "$HAL_DIR" ]; then
             echo ""
-            echo "Building WM1302 library..."
+            echo "Building SX1302 library..."
 
             # Build libtools first
             if ! (cd "$HAL_DIR/libtools" && make clean >/dev/null 2>&1 && make all >/dev/null 2>&1); then
@@ -317,21 +317,21 @@ else
                 echo "Creating shared library..."
                 if (cd "$HAL_DIR/libloragw" && \
                     gcc -shared -o libloragw.so -Wl,--whole-archive libloragw.a -Wl,--no-whole-archive -L../libtools -ltinymt32 -lrt -lm 2>&1) | tail -3; then
-                    echo "✓ WM1302 library built successfully"
+                    echo "✓ SX1302 library built successfully"
                 else
                     echo "✗ Failed to create shared library"
                 fi
             else
-                echo "✗ WM1302 library build failed"
+                echo "✗ SX1302 library build failed"
                 echo "  Please check build dependencies (gcc, make)"
             fi
             echo ""
         fi
 
-        # Extract WM1302-specific fields
+        # Extract SX1302-specific fields
         com_path=$(echo "$hw_config" | jq -r '.com_path // empty')
 
-        # Update wm1302 section
+        # Update sx1302 section
         if [ -n "$com_path" ]; then
             sed "${SED_OPTS[@]}" "s|^  com_path:.*|  com_path: \"$com_path\"|" "$CONFIG_FILE"
         fi
@@ -439,7 +439,7 @@ echo "  Coding Rate: $cr"
 echo ""
 echo "Hardware Configuration:"
 if [ "$hardware_type" == "sx1302" ]; then
-    echo "  Type: WM1302/SX1302 Concentrator"
+    echo "  Type: SX1302 Concentrator"
     [ -n "$com_path" ] && echo "  SPI Device: $com_path"
     echo "  TX Power: $tx_power dBm"
     echo "  Preamble Length: $preamble_length"

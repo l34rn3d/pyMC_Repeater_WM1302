@@ -1,1 +1,1 @@
-"""Hardware drivers for WM1302 LoRa concentrator"""
+"""Hardware drivers for SX1302 LoRa concentrator"""

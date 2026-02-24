@@ -10,6 +10,7 @@ from ctypes import (
     c_uint32,
     c_uint64,
     c_int8,
+    c_int16,
     c_int32,
     c_float,
     c_bool,
@@ -67,6 +68,14 @@ LGW_COM_USB = 1
 STAT_NO_CRC  = 0x01  # CRC not present
 STAT_CRC_BAD = 0x11  # CRC present but failed
 STAT_CRC_OK  = 0x10  # CRC present and valid
+
+# Spectral scan (SX1261 companion chip)
+LGW_SPECTRAL_SCAN_RESULT_SIZE  = 33
+
+SPECTRAL_SCAN_STATUS_NONE      = 0
+SPECTRAL_SCAN_STATUS_ONGOING   = 1
+SPECTRAL_SCAN_STATUS_ABORTED   = 2
+SPECTRAL_SCAN_STATUS_COMPLETED = 3
 
 
 # Structures
@@ -171,6 +180,36 @@ class lgw_pkt_tx_s(Structure):
     ]
 
 
+# SX1261 / LBT structures (verify alignment against loragw_hal.h if upgrading sx1302_hal)
+class lgw_conf_lbt_chan_s(Structure):
+    _fields_ = [
+        ("freq_hz",          c_uint32),
+        ("bandwidth",        c_uint8),
+        ("_pad",             c_uint8 * 3),
+        ("scan_time_us",     c_uint32),
+        ("transmit_time_ms", c_uint16),
+        ("_pad2",            c_uint8 * 2),
+    ]
+
+
+class lgw_conf_lbt_s(Structure):
+    _fields_ = [
+        ("enable",      c_bool),
+        ("rssi_target", c_int8),
+        ("nb_channel",  c_uint8),
+        ("channels",    lgw_conf_lbt_chan_s * 8),
+    ]
+
+
+class lgw_conf_sx1261_s(Structure):
+    _fields_ = [
+        ("enable",      c_bool),
+        ("spi_path",    c_char * 64),
+        ("rssi_offset", c_int8),
+        ("lbt_conf",    lgw_conf_lbt_s),
+    ]
+
+
 # Function prototypes
 _lib.lgw_board_setconf.argtypes = [POINTER(lgw_conf_board_s)]
 _lib.lgw_board_setconf.restype = c_int32
@@ -195,6 +234,24 @@ _lib.lgw_send.restype = c_int32
 
 _lib.lgw_status.argtypes = [c_uint8, c_uint8, POINTER(c_uint8)]
 _lib.lgw_status.restype = c_int32
+
+_lib.lgw_sx1261_setconf.argtypes = [POINTER(lgw_conf_sx1261_s)]
+_lib.lgw_sx1261_setconf.restype = c_int32
+
+_lib.lgw_spectral_scan_start.argtypes = [c_uint32, c_uint16]
+_lib.lgw_spectral_scan_start.restype = c_int32
+
+_lib.lgw_spectral_scan_get_status.argtypes = [POINTER(c_int32)]
+_lib.lgw_spectral_scan_get_status.restype = c_int32
+
+_lib.lgw_spectral_scan_get_results.argtypes = [
+    POINTER(c_int16 * LGW_SPECTRAL_SCAN_RESULT_SIZE),
+    POINTER(c_uint16 * LGW_SPECTRAL_SCAN_RESULT_SIZE),
+]
+_lib.lgw_spectral_scan_get_results.restype = c_int32
+
+_lib.lgw_spectral_scan_abort.argtypes = []
+_lib.lgw_spectral_scan_abort.restype = c_int32
 
 
 # Wrapper functions
@@ -234,3 +291,23 @@ def lgw_status(rf_chain, select):
     code = c_uint8()
     result = _lib.lgw_status(rf_chain, select, ctypes.byref(code))
     return result, code.value
+
+
+def lgw_sx1261_setconf(conf):
+    return _lib.lgw_sx1261_setconf(ctypes.byref(conf))
+
+
+def lgw_spectral_scan_start(freq_hz, nb_scan):
+    return _lib.lgw_spectral_scan_start(freq_hz, nb_scan)
+
+
+def lgw_spectral_scan_get_status(status_ptr):
+    return _lib.lgw_spectral_scan_get_status(status_ptr)
+
+
+def lgw_spectral_scan_get_results(levels_ptr, counts_ptr):
+    return _lib.lgw_spectral_scan_get_results(levels_ptr, counts_ptr)
+
+
+def lgw_spectral_scan_abort():
+    return _lib.lgw_spectral_scan_abort()

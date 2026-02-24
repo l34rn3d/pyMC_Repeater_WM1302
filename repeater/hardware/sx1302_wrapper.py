@@ -1,17 +1,23 @@
-"""WM1302 Radio Wrapper for pyMC_Repeater
+"""SX1302 Radio Wrapper for pyMC_Repeater
 
 This wrapper provides a simplified interface to the SX1302 concentrator
 that is compatible with the repeater's expectations.
 """
 
 import asyncio
+import ctypes
 import logging
 import subprocess
 import threading
 import time
+from ctypes import c_int16, c_int32, c_uint16
 from typing import Optional, Tuple
 
 from .sx1302_bindings import (
+    LGW_SPECTRAL_SCAN_RESULT_SIZE,
+    SPECTRAL_SCAN_STATUS_ABORTED,
+    SPECTRAL_SCAN_STATUS_COMPLETED,
+    SPECTRAL_SCAN_STATUS_NONE,
     STAT_CRC_OK,
     BW_125KHZ,
     BW_250KHZ,
@@ -36,21 +42,27 @@ from .sx1302_bindings import (
     lgw_conf_board_s,
     lgw_conf_rxif_s,
     lgw_conf_rxrf_s,
+    lgw_conf_sx1261_s,
     lgw_pkt_rx_s,
     lgw_pkt_tx_s,
     lgw_receive,
     lgw_rxif_setconf,
     lgw_rxrf_setconf,
     lgw_send,
+    lgw_spectral_scan_abort,
+    lgw_spectral_scan_get_results,
+    lgw_spectral_scan_get_status,
+    lgw_spectral_scan_start,
     lgw_start,
     lgw_stop,
+    lgw_sx1261_setconf,
 )
 
-logger = logging.getLogger("WM1302Radio")
+logger = logging.getLogger("SX1302Radio")
 
 
-class WM1302Radio:
-    """WM1302 concentrator wrapper"""
+class SX1302Radio:
+    """SX1302 concentrator wrapper"""
 
     _instance = None
     _lock = threading.Lock()
@@ -73,6 +85,7 @@ class WM1302Radio:
         tx_power=14,
         sync_word=13380,
         com_path=b"/dev/spidev0.0",
+        sx1261_spi_path=None,
         **kwargs
     ):
         self.frequency = frequency
@@ -83,17 +96,21 @@ class WM1302Radio:
         self.tx_power = tx_power
         self.sync_word = sync_word
         self.com_path = com_path
+        self.sx1261_spi_path = sx1261_spi_path
 
         self.is_started = False
         self._rx_callback = None
         self._rx_thread = None
         self._rx_running = False
-        self._last_rssi = -120  # Last measured channel RSSI (noise floor)
+        self._last_rssi = -120  # Last measured noise floor (dBm)
         self._last_snr = 0  # Last measured SNR
         self._loop = None  # Store event loop reference
+        self._sx1261_enabled = False
+        self._last_noise_scan = 0  # Trigger scan immediately on first run
+        self._sx1261_abort_count = 0
 
         logger.info(
-            f"Initializing WM1302: freq={frequency}Hz, SF={spreading_factor}, "
+            f"Initializing SX1302: freq={frequency}Hz, SF={spreading_factor}, "
             f"BW={bandwidth}Hz, CR=4/{coding_rate}, preamble={preamble_length}"
         )
 
@@ -124,9 +141,9 @@ class WM1302Radio:
         return mapping.get(sf, DR_LORA_SF8)
 
     def _reset_concentrator(self):
-        """Execute GPIO reset sequence for WM1302 (Debian 12 compatible)"""
+        """Execute GPIO reset sequence for SX1302 (Debian 12 compatible)"""
         try:
-            logger.info("Performing WM1302 GPIO reset sequence")
+            logger.info("Performing SX1302 GPIO reset sequence")
 
             # Call the reset script (more reliable than individual gpioset calls)
             import os
@@ -181,7 +198,7 @@ class WM1302Radio:
     def begin(self):
         """Initialize and start the concentrator"""
         if self.is_started:
-            logger.warning("WM1302 already started")
+            logger.warning("SX1302 already started")
             return True
 
         # Capture the event loop for callback scheduling
@@ -242,7 +259,7 @@ class WM1302Radio:
                 return False
 
             # Configure IF chain for LoRa
-            # WM1302 IF chains: 0-7 are multi-SF (125kHz only), 8 is LoRa standard (any BW)
+            # SX1302 IF chains: 0-7 are multi-SF (125kHz only), 8 is LoRa standard (any BW)
             if_chain_num = 8 if self.bandwidth != 125000 else 0
 
             if_conf = lgw_conf_rxif_s()
@@ -259,6 +276,21 @@ class WM1302Radio:
                 logger.error(f"IF chain config failed: {ret}")
                 return False
 
+            # Configure SX1261 companion chip for spectral scan noise floor (optional)
+            if self.sx1261_spi_path:
+                sx1261_conf = lgw_conf_sx1261_s()
+                sx1261_conf.enable = True
+                path = self.sx1261_spi_path
+                sx1261_conf.spi_path = path if isinstance(path, bytes) else path.encode()
+                sx1261_conf.rssi_offset = 0
+                sx1261_conf.lbt_conf.enable = False
+                ret = lgw_sx1261_setconf(sx1261_conf)
+                if ret == LGW_HAL_SUCCESS:
+                    self._sx1261_enabled = True
+                    logger.info("SX1261 configured for spectral scan noise floor")
+                else:
+                    logger.warning("SX1261 setconf failed — noise floor unavailable")
+
             # Start concentrator
             ret = lgw_start()
             if ret != LGW_HAL_SUCCESS:
@@ -266,7 +298,7 @@ class WM1302Radio:
                 return False
 
             self.is_started = True
-            logger.info("WM1302 concentrator started successfully")
+            logger.info("SX1302 concentrator started successfully")
 
             # Start RX thread
             self._rx_running = True
@@ -276,7 +308,7 @@ class WM1302Radio:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to initialize WM1302: {e}")
+            logger.error(f"Failed to initialize SX1302: {e}")
             return False
 
     def end(self):
@@ -290,7 +322,7 @@ class WM1302Radio:
 
         lgw_stop()
         self.is_started = False
-        logger.info("WM1302 concentrator stopped")
+        logger.info("SX1302 concentrator stopped")
 
     async def send(self, data: bytes) -> bool:
         """Send a packet"""
@@ -323,22 +355,70 @@ class WM1302Radio:
 
         return True
 
+    def _measure_noise_floor(self):
+        """Run a spectral scan on the operating frequency and update _last_rssi."""
+        if not self._sx1261_enabled:
+            return
+        nb_scan = 200
+        ret = lgw_spectral_scan_start(self.frequency, nb_scan)
+        if ret != LGW_HAL_SUCCESS:
+            logger.debug(f"Spectral scan start failed: {ret}")
+            return
+
+        status = c_int32(SPECTRAL_SCAN_STATUS_NONE)
+        for _ in range(40):          # 40 × 50ms = 2s max
+            lgw_spectral_scan_get_status(ctypes.byref(status))
+            if status.value == SPECTRAL_SCAN_STATUS_COMPLETED:
+                self._sx1261_abort_count = 0
+                break
+            if status.value == SPECTRAL_SCAN_STATUS_ABORTED:
+                self._sx1261_abort_count += 1
+                if self._sx1261_abort_count >= 3:
+                    logger.warning("SX1261 spectral scan aborting repeatedly — disabling noise floor (no SX1261 on this hardware?)")
+                    self._sx1261_enabled = False
+                else:
+                    logger.debug("Spectral scan aborted")
+                return
+            time.sleep(0.05)
+        else:
+            logger.debug("Spectral scan timed out")
+            lgw_spectral_scan_abort()
+            return
+
+        levels = (c_int16 * LGW_SPECTRAL_SCAN_RESULT_SIZE)()
+        counts = (c_uint16 * LGW_SPECTRAL_SCAN_RESULT_SIZE)()
+        ret = lgw_spectral_scan_get_results(ctypes.byref(levels), ctypes.byref(counts))
+        if ret != LGW_HAL_SUCCESS:
+            logger.debug(f"Spectral scan get_results failed: {ret}")
+            return
+
+        logger.debug(f"Spectral scan counts[0..4]: {[counts[i] for i in range(5)]}, levels[0..4]: {[int(levels[i]) for i in range(5)]}")
+
+        # Noise floor = highest threshold (closest to 0 dBm) where ALL samples exceeded it.
+        # Levels decrease: 0, -4, -8 ... -128. We want the first bin where counts == nb_scan.
+        noise_floor = None
+        for i in range(LGW_SPECTRAL_SCAN_RESULT_SIZE):
+            if counts[i] == nb_scan:
+                noise_floor = int(levels[i])
+                break
+        if noise_floor is not None:
+            self._last_rssi = noise_floor
+            logger.debug(f"Noise floor (spectral scan): {noise_floor} dBm")
+        else:
+            logger.debug("Spectral scan completed but no full-count bins found")
+
     def _rx_loop(self):
         """Background thread for receiving packets"""
         while self._rx_running:
             try:
                 packets = lgw_receive(max_pkt=8)
                 for pkt in packets:
-                    # Update noise floor from channel RSSI
-                    if pkt.rssic != 0:
-                        self._last_rssi = int(pkt.rssic)
-
                     # Update SNR from packet
                     if pkt.size > 0:
                         self._last_snr = int(pkt.snr)
 
                     if pkt.size > 0 and pkt.status != STAT_CRC_OK:
-                        logger.warning(f"Dropped packet: bad CRC (status=0x{pkt.status:02X}, size={pkt.size}, rssi={int(pkt.rssic)}dBm)")
+                        logger.warning(f"Dropped packet: bad CRC (status=0x{pkt.status:02X}, size={pkt.size})")
 
                     if self._rx_callback and pkt.size > 0 and pkt.status == STAT_CRC_OK:
                         payload = bytes(pkt.payload[: pkt.size])
@@ -352,6 +432,11 @@ class WM1302Radio:
                             # No event loop available, call directly (fallback)
                             logger.warning("No event loop available, calling callback directly")
                             self._rx_callback(payload)
+
+                # Trigger noise floor scan every 30 seconds
+                if time.time() - self._last_noise_scan >= 30:
+                    self._measure_noise_floor()
+                    self._last_noise_scan = time.time()
             except Exception as e:
                 logger.error(f"RX loop error: {e}")
                 time.sleep(0.1)

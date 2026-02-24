@@ -9,15 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - dev branch
 
+### Breaking Changes
+- **WM1302→SX1302 rename**: All code, config keys, and docs renamed to `sx1302`/`SX1302`.
+  Config change required for existing SX1302 installs:
+  - `radio_type: "wm1302"` → `radio_type: "sx1302"`
+  - `wm1302:` config section → `sx1302:`
+  No backward-compat shim — update `config.yaml` manually or re-run setup.
+
+### Added
+- **SX1261 spectral scan noise floor**: Noise floor is now measured using the SX1261
+  companion chip's spectral scan at the operating frequency, updated every 30 seconds.
+  Replaces the previous approach of reading `pkt.rssic` from received packets (which
+  only updated on packet arrival and measured signal+noise, not ambient noise floor).
+  The SX1261 runs independently — scans do not interrupt packet reception.
+- **`sx1261_spi_path` config option** in the `sx1302:` section (e.g. `/dev/spidev0.1`).
+  Optional — if omitted, noise floor is not measured and a warning is logged at startup.
+
 ### Fixed
-- **WM1302 CRC filtering**: Bad-CRC packets were being passed to the repeater engine
+- **Spectral scan status enum**: `SPECTRAL_SCAN_STATUS_COMPLETED` and `SPECTRAL_SCAN_STATUS_ABORTED`
+  were swapped in `sx1302_bindings.py`. The actual `lgw_spectral_scan_status_t` enum is
+  `ABORTED=2, COMPLETED=3` — we had them reversed, so every completed scan was treated as aborted
+  and every abort treated as completed. Noise floor was never updated as a result.
+
+- **Spectral scan noise floor calculation**: The bin-search loop broke on the first zero-count bin
+  (always bin 0, threshold=0 dBm) before reaching the ~-95 dBm noise floor region. Fixed to break
+  on the first full-count bin instead, giving the highest threshold where all samples exceeded it.
+
+- **SX1302 CRC filtering**: Bad-CRC packets were being passed to the repeater engine
   instead of being discarded. The SX1302 C library sets `pkt.status` to `STAT_CRC_BAD`
   (0x11) for invalid packets but still includes them in the receive buffer. The Python
   `_rx_loop` was only checking `pkt.size > 0`, so corrupt packets made it through.
   Now checks `pkt.status == STAT_CRC_OK` (0x10) before dispatching to the callback,
   matching the behaviour of the SX1262 path in pymc_core.
 
-### Added
 - **CRC status constants** in `sx1302_bindings.py` matching `loragw_hal.h`:
   - `STAT_NO_CRC = 0x01` — CRC not present in packet
   - `STAT_CRC_BAD = 0x11` — CRC present but failed
