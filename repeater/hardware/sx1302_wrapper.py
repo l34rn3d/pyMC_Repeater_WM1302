@@ -392,7 +392,7 @@ class SX1302Radio:
             logger.debug(f"Spectral scan get_results failed: {ret}")
             return
 
-        logger.debug(f"Spectral scan counts[0..4]: {[counts[i] for i in range(5)]}, levels[0..4]: {[int(levels[i]) for i in range(5)]}")
+        logger.debug(f"Spectral scan results: { {int(levels[i]): counts[i] for i in range(LGW_SPECTRAL_SCAN_RESULT_SIZE)} }")
 
         # Noise floor = highest threshold (closest to 0 dBm) where ALL samples exceeded it.
         # Levels decrease: 0, -4, -8 ... -128. We want the first bin where counts == nb_scan.
