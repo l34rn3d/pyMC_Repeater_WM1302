@@ -418,7 +418,7 @@ class SX1302Radio:
                         self._last_snr = int(pkt.snr)
 
                     if pkt.size > 0 and pkt.status != STAT_CRC_OK:
-                        logger.warning(f"Dropped packet: bad CRC (status=0x{pkt.status:02X}, size={pkt.size})")
+                        logger.info(f"Dropped packet: bad CRC (status=0x{pkt.status:02X}, size={pkt.size})")
 
                     if self._rx_callback and pkt.size > 0 and pkt.status == STAT_CRC_OK:
                         payload = bytes(pkt.payload[: pkt.size])
