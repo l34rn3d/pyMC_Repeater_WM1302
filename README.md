@@ -39,7 +39,7 @@ WM1302 LoRa Concentrator
     Frequency: Any LoRa frequency (configurable)
     TX Power: Up to 26dBm (EU868) / 25dBm (US915)
     Interface: SPI (SPI0 default)
-    Note: Higher performance than standard transceivers - better sensitivity and TX power
+    Note: Some GPIO changes may be required depeding on your Pihat for the sx1302
     Installation Guide: See INSTALL_WM1302.md
 
 Waveshare LoRaWAN/GNSS HAT (SPI Version Only)
