@@ -337,6 +337,9 @@ class WM1302Radio:
                     if pkt.size > 0:
                         self._last_snr = int(pkt.snr)
 
+                    if pkt.size > 0 and pkt.status != STAT_CRC_OK:
+                        logger.warning(f"Dropped packet: bad CRC (status=0x{pkt.status:02X}, size={pkt.size}, rssi={int(pkt.rssic)}dBm)")
+
                     if self._rx_callback and pkt.size > 0 and pkt.status == STAT_CRC_OK:
                         payload = bytes(pkt.payload[: pkt.size])
                         # Schedule callback in the event loop
