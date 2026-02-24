@@ -34,9 +34,9 @@ The following hardware is currently supported out-of-the-box:
 
 WM1302 LoRa Concentrator
 
-    Hardware: WM1302/SX1302 LoRa concentrator (gateway-class hardware)
+    Hardware: WM1302/SX1302 LoRa concentrator (SPI)
     Platform: Raspberry Pi (or compatible single-board computer)
-    Frequency: Any LoRa frequency (configurable)
+    Frequency: 868MHz (EU) or 915MHz (US)
     TX Power: Up to 26dBm (EU868) / 25dBm (US915)
     Interface: SPI (SPI0 default)
     Note: Some GPIO changes may be required depeding on your Pihat for the sx1302
