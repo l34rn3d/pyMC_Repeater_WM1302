@@ -138,7 +138,7 @@ sudo apt install git -y
 
 **Clone the Repository:**
 ```bash
-git clone https://github.com/l34rn3d/pyMC_Repeater_WM1302.git
+git clone -b dev https://github.com/l34rn3d/pyMC_Repeater_WM1302.git
 cd pyMC_Repeater_WM1302
 ```
 

@@ -29,9 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ```bash
 # Clone and switch to dev
-git clone https://github.com/l34rn3d/pyMC_Repeater_WM1302.git
+git clone -b dev https://github.com/l34rn3d/pyMC_Repeater_WM1302.git
 cd pyMC_Repeater_WM1302
-git checkout dev
 
 # Install
 sudo ./manage.sh install
