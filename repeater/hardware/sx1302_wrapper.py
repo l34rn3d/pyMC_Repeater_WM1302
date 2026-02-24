@@ -394,18 +394,18 @@ class SX1302Radio:
 
         logger.debug(f"Spectral scan results: { {int(levels[i]): counts[i] for i in range(LGW_SPECTRAL_SCAN_RESULT_SIZE)} }")
 
-        # Noise floor = highest threshold (closest to 0 dBm) where ALL samples exceeded it.
-        # Levels decrease: 0, -4, -8 ... -128. We want the first bin where counts == nb_scan.
+        # Noise floor = highest threshold (closest to 0 dBm) where any samples were detected.
+        # Levels decrease: 0, -4, -8 ... -128. Take the first bin with a non-zero count.
         noise_floor = None
         for i in range(LGW_SPECTRAL_SCAN_RESULT_SIZE):
-            if counts[i] == nb_scan:
+            if counts[i] > 0:
                 noise_floor = int(levels[i])
                 break
         if noise_floor is not None:
             self._last_rssi = noise_floor
             logger.debug(f"Noise floor (spectral scan): {noise_floor} dBm")
         else:
-            logger.debug("Spectral scan completed but no full-count bins found")
+            logger.debug("Spectral scan completed but no counts found")
 
     def _rx_loop(self):
         """Background thread for receiving packets"""
