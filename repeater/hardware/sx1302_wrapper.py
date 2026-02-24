@@ -459,6 +459,10 @@ class SX1302Radio:
         """Get last RSSI (alias for compatibility with dispatcher)"""
         return self.get_rssi()
 
+    def get_noise_floor(self) -> int:
+        """Get noise floor (alias for engine compatibility)"""
+        return self.get_rssi()
+
     def get_last_snr(self) -> int:
         """Get last measured SNR"""
         return self._last_snr
