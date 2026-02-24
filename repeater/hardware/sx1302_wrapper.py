@@ -377,7 +377,7 @@ class SX1302Radio:
                     logger.warning("SX1261 spectral scan aborting repeatedly — disabling noise floor (no SX1261 on this hardware?)")
                     self._sx1261_enabled = False
                 else:
-                    logger.debug("Spectral scan aborted")
+                    logger.debug(f"Spectral scan aborted (status={status.value})")
                 return
             time.sleep(0.05)
         else:
