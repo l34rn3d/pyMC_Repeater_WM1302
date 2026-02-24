@@ -63,6 +63,11 @@ LGW_RADIO_TYPE_SX1250 = 5
 LGW_COM_SPI = 0
 LGW_COM_USB = 1
 
+# RX packet CRC status (from loragw_hal.h)
+STAT_NO_CRC  = 0x01  # CRC not present
+STAT_CRC_BAD = 0x11  # CRC present but failed
+STAT_CRC_OK  = 0x10  # CRC present and valid
+
 
 # Structures
 class lgw_conf_board_s(Structure):

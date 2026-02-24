@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - dev branch
+
+### Fixed
+- **WM1302 CRC filtering**: Bad-CRC packets were being passed to the repeater engine
+  instead of being discarded. The SX1302 C library sets `pkt.status` to `STAT_CRC_BAD`
+  (0x11) for invalid packets but still includes them in the receive buffer. The Python
+  `_rx_loop` was only checking `pkt.size > 0`, so corrupt packets made it through.
+  Now checks `pkt.status == STAT_CRC_OK` (0x10) before dispatching to the callback,
+  matching the behaviour of the SX1262 path in pymc_core.
+
+### Added
+- **CRC status constants** in `sx1302_bindings.py` matching `loragw_hal.h`:
+  - `STAT_NO_CRC = 0x01` — CRC not present in packet
+  - `STAT_CRC_BAD = 0x11` — CRC present but failed
+  - `STAT_CRC_OK = 0x10` — CRC present and valid
+
+---
+
+### Running the dev branch
+
+```bash
+# Clone and switch to dev
+git clone https://github.com/rightup/pyMC_Repeater.git
+cd pyMC_Repeater
+git checkout dev
+
+# Install
+sudo ./manage.sh install
+```
+
+Or if already installed, upgrade in-place:
+
+```bash
+cd /path/to/pyMC_Repeater
+git pull origin dev
+sudo ./manage.sh upgrade
+sudo systemctl restart pymc-repeater
+```
+
+Verify the running version:
+```bash
+sudo journalctl -u pymc-repeater -n 20
+```
+
+---
+
 ## [1.1.0] - 2026-02-13
 
 ### Added - WM1302 LoRa Concentrator Support

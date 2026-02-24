@@ -12,6 +12,7 @@ import time
 from typing import Optional, Tuple
 
 from .sx1302_bindings import (
+    STAT_CRC_OK,
     BW_125KHZ,
     BW_250KHZ,
     BW_500KHZ,
@@ -336,7 +337,7 @@ class WM1302Radio:
                     if pkt.size > 0:
                         self._last_snr = int(pkt.snr)
 
-                    if self._rx_callback and pkt.size > 0:
+                    if self._rx_callback and pkt.size > 0 and pkt.status == STAT_CRC_OK:
                         payload = bytes(pkt.payload[: pkt.size])
                         # Schedule callback in the event loop
                         if self._loop:
