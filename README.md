@@ -17,11 +17,17 @@ I am continuing to try and make it work with 62.5Khz. But have had no success ye
 
 I am also attempting to make it listen to a second frequency set. But this will be limited to 125Khz as a primary, and 125/250/500Khz as a secondary. this is a hardware limitation.
 
-Whats working.
+What’s working.
 Packet repeating,
 Adverts,
-Droping CRC fail packets,
+Dropping CRC fail packets,
 Noise floor based on spectral analysis (on chip sx1261)
+
+
+
+I have altered the manage.sh script to allow for the SX1302,
+And when selected during install it will build the SX1302_HAL library from Semtech as required. 
+
 
 
 ---
