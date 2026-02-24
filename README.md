@@ -4,21 +4,25 @@ Repeater Daemon in Python using the `pymc_core` Lib.
 
 ---
 
-I started **pyMC_core** as a way to really get under the skin of **MeshCore** — to see how it ticked and why it behaved the way it did.
-After a few late nights of tinkering, testing, and head-scratching, I shared what I’d learned with the community.
-The response was honestly overwhelming — loads of encouragement, great feedback, and a few people asking if I could spin it into a lightweight **repeater daemon** that would run happily on low-power, Pi-class hardware.
+My AI slop created driver to make a SX1302 based concentrator as commonly found in the now semi dormant "LoRa Helium" network hotspots.
 
-That challenge shaped much of what followed:
-- I went with a lightweight HTTP server (**CherryPy**) instead of a full-fat framework.
-- I stuck with simple polling over WebSockets — it’s more reliable, has fewer dependencies, and is far less resource hungry.
-- I kept the architecture focused on being **clear, modular, and hackable** rather than chasing performance numbers.
+These hotspots are commonly a PI4 (full or compute) a PiHat and a SX1302 or SX1301 concentrator. 
 
-There’s still plenty of room for this project to grow and improve — but you’ve got to start somewhere!
-My hope is that **pyMC_repeater** serves as a solid, approachable foundation that others can learn from, build on, and maybe even have a bit of fun with along the way.
+I only have access to a SX1302 based Sensecap  M1 at the moment. (happy to work with people to add in SX1301 support).
+In addition each manufacture may have used different GPIO's to trigger the restart of the SX1302 concentrator needed to enable the device. 
 
-> **I’d love to see these repeaters out in the wild — actually running in real networks and production setups.**
-> My own testing so far has been in a very synthetic environment with little to no other users in my area,
-> so feedback from real-world deployments would be incredibly valuable!
+A Major limitation of the SX1302 is that it CANNOT work on 62.5Khz (or narrow) settings. as the Lora decoders on chip simply do not accept it/have filters for it.
+It will work with 125/250/500Khz.
+I am continuing to try and make it work with 62.5Khz. But have had no success yet. 
+
+I am also attempting to make it listen to a second frequency set. But this will be limited to 125Khz as a primary, and 125/250/500Khz as a secondary. this is a hardware limitation.
+
+Whats working.
+Packet repeating,
+Adverts,
+Droping CRC fail packets,
+Noise floor based on spectral analysis (on chip sx1261)
+
 
 ---
 
