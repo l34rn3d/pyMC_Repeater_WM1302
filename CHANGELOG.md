@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ```bash
 # Clone and switch to dev
 git clone https://github.com/l34rn3d/pyMC_Repeater_WM1302.git
-cd pyMC_Repeater
+cd pyMC_Repeater_WM1302
 git checkout dev
 
 # Install
@@ -40,7 +40,7 @@ sudo ./manage.sh install
 Or if already installed, upgrade in-place:
 
 ```bash
-cd /path/to/pyMC_Repeater
+cd /path/to/pyMC_Repeater_WM1302
 git pull origin dev
 sudo ./manage.sh upgrade
 sudo systemctl restart pymc-repeater
