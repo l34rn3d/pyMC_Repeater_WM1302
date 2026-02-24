@@ -18,10 +18,10 @@ I am continuing to try and make it work with 62.5Khz. But have had no success ye
 I am also attempting to make it listen to a second frequency set. But this will be limited to 125Khz as a primary, and 125/250/500Khz as a secondary. this is a hardware limitation.
 
 What’s working.
-Packet repeating,
-Adverts,
-Dropping CRC fail packets,
-Noise floor based on spectral analysis (on chip sx1261)
+Packet repeating,   
+Adverts,   
+Dropping CRC fail packets,   
+Noise floor based on spectral analysis (on chip sx1261)   
 
 
 
