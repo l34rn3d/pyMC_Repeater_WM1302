@@ -30,13 +30,13 @@ And when selected during install it will build the SX1302_HAL library from Semte
 
 
 For NSW Wide settings please use the following. (edit /etc/pymc_repeater/config.yaml)
-  frequency: 915800000
-  tx_power: 26
-  bandwidth: 250000
-  spreading_factor: 11
-  coding_rate: 5
-  preamble_length: 16
-  sync_word: 18
+  frequency: 915800000   
+  tx_power: 26   
+  bandwidth: 250000   
+  spreading_factor: 11   
+  coding_rate: 5   
+  preamble_length: 16   
+  sync_word: 18   
 
 
 
