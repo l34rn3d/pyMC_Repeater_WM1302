@@ -1,3 +1,12 @@
+Please Look at the DEV branch for working SX1302 software, and Dev-DualFreq for my playing around with getting the two radios in the SX1302 working at the same time, as well and 62.5Khz bandwith.
+
+
+
+
+
+
+
+
 # pyMC_repeater
 
 Repeater Daemon in Python using the `pymc_core` Lib.
