@@ -75,24 +75,6 @@ Dashboard:
 http://<device-ip>:8000
 ```
 
-## Coffee Test Node Example
-
-```bash
-sshpass -p 'claude' ssh -o StrictHostKeyChecking=no claude@100.67.145.124
-sudo apt update
-sudo apt install -y git
-git clone -b dev https://github.com/l34rn3d/pyMC_Repeater_WM1302.git pyMC_Repeater
-cd pyMC_Repeater
-./preinstall-sx1302.sh
-sudo ./manage.sh install
-```
-
-Then open:
-
-```text
-http://100.67.145.124:8000/setup
-```
-
 ## Clean Reinstall
 
 Use this before a fresh test install:
