@@ -30,9 +30,10 @@ The repeater daemon runs continuously as a background process, forwarding LoRa p
 
 ## Supported Hardware (Out of the Box)
 
-The repeater supports two radio backends:
+The repeater supports three radio backends:
 
 - **SX1262 (SPI)** — Direct connection to LoRa modules (HATs, etc.) as listed below.
+- **SX1302 / WM1302 concentrator** — Gateway-class SPI concentrator support. Set `radio_type: sx1302` or `radio_type: wm1302` and configure `sx1302.com_path`.
 - **KISS modem** — Serial TNC using the KISS protocol. Set `radio_type: kiss` in config and configure `kiss.port` and `kiss.baud_rate`.
 
 > [!CAUTION]
@@ -45,13 +46,14 @@ The repeater supports two radio backends:
 > | Native SPI radio SX1262 | ✅ Yes |
 > | USB–SPI bridge (CH341F) | ✅ Yes |
 > | UART-based HATs | ❌ No |
-> | SX1302 concentrator boards | ❌ No |
+> | SX1302 concentrator boards | ✅ Yes |
 > | SX1303 concentrator boards | ❌ No |
 >
 > This project supports **single-radio SPI transceivers only**, either:
 > - Connected directly via SPI
 > - Connected via a CH341F USB–SPI adapter
 > - Connected using hardware that supports Meshcore Kiss Modem firmware
+> - Connected as an SX1302/WM1302 SPI concentrator with the SX1302 HAL installed under `/opt/pymc_repeater/sx1302_hal`
 
 The following hardware is currently supported out-of-the-box:
 

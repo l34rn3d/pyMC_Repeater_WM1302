@@ -318,6 +318,29 @@ def get_radio_for_board(board_config: dict):
     if radio_type == "kiss-modem":
         radio_type = "kiss"
 
+    if radio_type in ("sx1302", "wm1302"):
+        from repeater.hardware.sx1302_wrapper import SX1302Radio
+
+        radio_config = board_config.get("radio")
+        if not radio_config:
+            raise ValueError("Missing 'radio' section in configuration file")
+
+        sx1302_config = board_config.get("sx1302", {})
+        radio = SX1302Radio.get_instance(
+            frequency=int(radio_config["frequency"]),
+            tx_power=radio_config["tx_power"],
+            spreading_factor=radio_config["spreading_factor"],
+            bandwidth=int(radio_config["bandwidth"]),
+            coding_rate=radio_config["coding_rate"],
+            preamble_length=radio_config["preamble_length"],
+            sync_word=radio_config.get("sync_word", 13380),
+            com_path=sx1302_config.get("com_path", "/dev/spidev0.0"),
+            sx1261_spi_path=sx1302_config.get("sx1261_spi_path"),
+        )
+        if not radio.begin():
+            raise RuntimeError("Failed to initialize SX1302 radio")
+        return radio
+
     if radio_type in ("sx1262", "sx1262_ch341"):
         from pymc_core.hardware.sx1262_wrapper import SX1262Radio
 
@@ -443,5 +466,5 @@ def get_radio_for_board(board_config: dict):
         return radio
 
     raise RuntimeError(
-        f"Unknown radio type: {radio_type}. Supported: sx1262, sx1262_ch341, kiss (or kiss-modem)"
+        f"Unknown radio type: {radio_type}. Supported: sx1262, sx1262_ch341, sx1302, wm1302, kiss (or kiss-modem)"
     )

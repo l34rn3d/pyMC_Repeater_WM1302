@@ -108,6 +108,7 @@ class SX1302Radio:
         self._sx1261_enabled = False
         self._last_noise_scan = 0  # Trigger scan immediately on first run
         self._sx1261_abort_count = 0
+        self._tx_in_progress = False
 
         logger.info(
             f"Initializing SX1302: freq={frequency}Hz, SF={spreading_factor}, "
@@ -147,10 +148,17 @@ class SX1302Radio:
 
             # Call the reset script (more reliable than individual gpioset calls)
             import os
-            script_path = os.path.join(
-                os.path.dirname(__file__), "../../sx1302_hal/libloragw/reset_lgw.sh"
+            script_candidates = [
+                "/opt/pymc_repeater/sx1302_hal/libloragw/reset_lgw.sh",
+                os.path.abspath(
+                    os.path.join(
+                        os.path.dirname(__file__), "../../sx1302_hal/libloragw/reset_lgw.sh"
+                    )
+                ),
+            ]
+            script_path = next(
+                (path for path in script_candidates if os.path.exists(path)), script_candidates[0]
             )
-            script_path = os.path.abspath(script_path)
 
             if os.path.exists(script_path):
                 result = subprocess.run([script_path], capture_output=True, text=True, timeout=5)
@@ -324,11 +332,11 @@ class SX1302Radio:
         self.is_started = False
         logger.info("SX1302 concentrator stopped")
 
-    async def send(self, data: bytes) -> bool:
-        """Send a packet"""
+    async def send(self, data: bytes):
+        """Send a packet. Returns tx_metadata dict on success, None on failure."""
         if not self.is_started:
             logger.error("Cannot send: concentrator not started")
-            return False
+            return None
 
         pkt = lgw_pkt_tx_s()
         pkt.freq_hz = self.frequency
@@ -348,12 +356,16 @@ class SX1302Radio:
         for i, byte in enumerate(data):
             pkt.payload[i] = byte
 
-        ret = lgw_send(pkt)
+        self._tx_in_progress = True
+        try:
+            ret = lgw_send(pkt)
+        finally:
+            self._tx_in_progress = False
         if ret != LGW_HAL_SUCCESS:
             logger.error(f"Send failed: {ret}")
-            return False
+            return None
 
-        return True
+        return {"lbt_attempts": 0, "lbt_backoff_delays_ms": [], "lbt_channel_busy": False}
 
     def _measure_noise_floor(self):
         """Run a spectral scan on the operating frequency and update _last_rssi."""
@@ -433,8 +445,11 @@ class SX1302Radio:
                             logger.warning("No event loop available, calling callback directly")
                             self._rx_callback(payload)
 
-                # Trigger noise floor scan every 30 seconds
-                if time.time() - self._last_noise_scan >= 30:
+                # Trigger noise floor scan every 30 seconds, but never during TX
+                if (
+                    not self._tx_in_progress
+                    and time.time() - self._last_noise_scan >= 30
+                ):
                     self._measure_noise_floor()
                     self._last_noise_scan = time.time()
             except Exception as e:

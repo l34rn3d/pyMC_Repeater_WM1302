@@ -17,11 +17,16 @@ from ctypes import (
     c_char,
 )
 
-# Load the shared library
-_lib_path = os.path.join(
-    os.path.dirname(__file__), "../../sx1302_hal/libloragw/libloragw.so"
-)
-_lib = ctypes.CDLL(os.path.abspath(_lib_path))
+# Load the shared library. Installed services keep sx1302_hal under /opt,
+# while source-tree runs may have it next to the Python package.
+_lib_candidates = [
+    "/opt/pymc_repeater/sx1302_hal/libloragw/libloragw.so",
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../sx1302_hal/libloragw/libloragw.so")
+    ),
+]
+_lib_path = next((path for path in _lib_candidates if os.path.exists(path)), _lib_candidates[0])
+_lib = ctypes.CDLL(_lib_path)
 
 # Constants
 LGW_HAL_SUCCESS = 0
