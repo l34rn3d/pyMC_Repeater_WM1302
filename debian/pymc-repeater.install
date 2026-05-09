@@ -1,0 +1,3 @@
+config.yaml.example usr/share/pymc_repeater/
+radio-presets.json usr/share/pymc_repeater/
+radio-settings.json usr/share/pymc_repeater/

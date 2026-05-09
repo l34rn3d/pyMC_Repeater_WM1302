@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    purge)
+        # Remove user and directories
+        if getent passwd pymc-repeater >/dev/null; then
+            deluser --system pymc-repeater || true
+        fi
+        rm -rf /etc/pymc-repeater
+        rm -rf /var/log/pymc-repeater
+        rm -rf /var/lib/pymc-repeater
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

@@ -6,13 +6,15 @@ which are used for network diagnostics to track the path and SNR
 of packets through the mesh network.
 """
 
+import asyncio
 import logging
 import time
-from typing import Dict, Any
+from typing import Any, Dict, List
 
 from pymc_core.hardware.signal_utils import snr_register_to_db
 from pymc_core.node.handlers.trace import TraceHandler
 from pymc_core.protocol.constants import MAX_PATH_SIZE, ROUTE_TYPE_DIRECT
+from pymc_core.protocol.packet_utils import PathUtils
 
 logger = logging.getLogger("TraceHelper")
 
@@ -20,22 +22,51 @@ logger = logging.getLogger("TraceHelper")
 class TraceHelper:
     """Helper class for processing trace packets in the repeater."""
 
-    def __init__(self, local_hash: int, repeater_handler, packet_injector=None, log_fn=None):
+    def __init__(
+        self,
+        local_hash: int,
+        repeater_handler,
+        packet_injector=None,
+        log_fn=None,
+        local_identity=None,
+    ):
         """
         Initialize the trace helper.
 
         Args:
-            local_hash: The local node's hash identifier
+            local_hash: The local node's 1-byte hash (first byte of pubkey); legacy
             repeater_handler: The RepeaterHandler instance
             packet_injector: Callable to inject new packets into the router for sending
             log_fn: Optional logging function for TraceHandler
+            local_identity: LocalIdentity (or any object with get_public_key()) for
+                multibyte TRACE path matching (Mesh.cpp isHashMatch with 1<<path_sz bytes)
         """
         self.local_hash = local_hash
+        self.local_identity = local_identity
+        self._pubkey_bytes: bytes = b""
+        if local_identity is not None and hasattr(local_identity, "get_public_key"):
+            try:
+                self._pubkey_bytes = bytes(local_identity.get_public_key())
+            except Exception:
+                self._pubkey_bytes = b""
         self.repeater_handler = repeater_handler
         self.packet_injector = packet_injector  # Function to inject packets into router
-        
+
+        # Ping callback system - track pending ping requests by tag
+        self.pending_pings = (
+            {}
+        )  # {tag: {'event': asyncio.Event(), 'result': dict, 'target': int, 'sent_at': float}}
+
+        # Optional: when trace reaches final node, call this (packet, parsed_data) to push 0x89 to companions
+        self.on_trace_complete = None  # async (packet, parsed_data) -> None
+
         # Create TraceHandler internally as a parsing utility
         self.trace_handler = TraceHandler(log_fn=log_fn or logger.info)
+
+    def _pubkey_prefix(self, width: int) -> bytes:
+        if width <= 0 or not self._pubkey_bytes:
+            return b""
+        return self._pubkey_bytes[:width]
 
     async def process_trace_packet(self, packet) -> None:
         """
@@ -48,29 +79,55 @@ class TraceHelper:
             packet: The trace packet to process
         """
         try:
-            # Only process direct route trace packets
-            if packet.get_route_type() != ROUTE_TYPE_DIRECT or packet.path_len >= MAX_PATH_SIZE:
+            # Only process direct route trace packets (SNR path uses len(packet.path))
+            if packet.get_route_type() != ROUTE_TYPE_DIRECT or len(packet.path) >= MAX_PATH_SIZE:
                 return
 
             # Parse the trace payload
             parsed_data = self.trace_handler._parse_trace_payload(packet.payload)
 
             if not parsed_data.get("valid", False):
-                logger.warning(
-                    f"Invalid trace packet: {parsed_data.get('error', 'Unknown error')}"
-                )
+                logger.warning(f"Invalid trace packet: {parsed_data.get('error', 'Unknown error')}")
                 return
 
-            trace_path = parsed_data["trace_path"]
-            trace_path_len = len(trace_path)
+            trace_bytes: bytes = parsed_data.get("trace_path_bytes") or b""
+            flags = parsed_data.get("flags", 0)
+            hash_width = PathUtils.trace_payload_hash_width(flags)
+            trace_hops: List[bytes] = parsed_data.get("trace_hops") or []
+            num_hops = len(trace_hops)
+            legacy_trace_path = parsed_data.get("trace_path") or []
+
+            # Check if this is a response to one of our pings
+            trace_tag = parsed_data.get("tag")
+            if trace_tag in self.pending_pings:
+                rssi_val = getattr(packet, "rssi", 0)
+                if rssi_val == 0:
+                    logger.warning(
+                        f"Ignoring trace response for tag {trace_tag} "
+                        "with RSSI=0 (no signal data)"
+                    )
+                    return  # wait for a valid response or let timeout handle it
+                ping_info = self.pending_pings[trace_tag]
+                # Store response data (legacy path list + structured hops)
+                ping_info["result"] = {
+                    "path": legacy_trace_path,
+                    "trace_hops": trace_hops,
+                    "trace_path_bytes": trace_bytes,
+                    "snr": packet.get_snr(),
+                    "rssi": rssi_val,
+                    "received_at": time.time(),
+                }
+                # Signal the waiting coroutine
+                ping_info["event"].set()
+                logger.info(f"Ping response received for tag {trace_tag}")
 
             # Record the trace packet for dashboard/statistics
             if self.repeater_handler:
-                packet_record = self._create_trace_record(packet, trace_path, parsed_data)
+                packet_record = self._create_trace_record(packet, parsed_data)
                 self.repeater_handler.log_trace_record(packet_record)
 
             # Extract and log path SNRs and hashes
-            path_snrs, path_hashes = self._extract_path_info(packet, trace_path)
+            path_snrs, path_hashes = self._extract_path_info(packet, parsed_data)
 
             # Add packet metadata for logging
             parsed_data["snr"] = packet.get_snr()
@@ -80,68 +137,104 @@ class TraceHelper:
             logger.info(f"{formatted_response}")
             logger.info(f"Path SNRs: [{', '.join(path_snrs)}], Hashes: [{', '.join(path_hashes)}]")
 
-            # Check if we should forward this trace packet
-            should_forward = self._should_forward_trace(packet, trace_path, trace_path_len)
+            should_forward = self._should_forward_trace(packet, trace_bytes, flags, hash_width)
 
             if should_forward:
-                await self._forward_trace_packet(packet, trace_path_len)
+                await self._forward_trace_packet(packet, num_hops)
             else:
-                # This is the final destination or can't forward - just log and record
-                self._log_no_forward_reason(packet, trace_path, trace_path_len)
+                self._log_no_forward_reason(packet, trace_bytes, hash_width)
+                if (
+                    self.on_trace_complete
+                    and self._is_trace_complete(packet, trace_bytes, hash_width)
+                    and self.repeater_handler
+                    and not self.repeater_handler.is_duplicate(packet)
+                ):
+                    try:
+                        await self.on_trace_complete(packet, parsed_data)
+                    except Exception as e:
+                        logger.debug("on_trace_complete error: %s", e)
 
         except Exception as e:
             logger.error(f"Error processing trace packet: {e}")
 
-    def _create_trace_record(self, packet, trace_path: list, parsed_data: dict) -> Dict[str, Any]:
+    def _is_trace_complete(self, packet, trace_bytes: bytes, hash_width: int) -> bool:
+        """Mirror Mesh.cpp: offset = path_len<<path_sz >= len(trace hash bytes)."""
+        if not trace_bytes or hash_width <= 0:
+            return False
+        snr_count = len(packet.path)
+        return snr_count * hash_width >= len(trace_bytes)
+
+    def _create_trace_record(self, packet, parsed_data: dict) -> Dict[str, Any]:
         """
         Create a packet record for trace packets to log to statistics.
 
         Args:
             packet: The trace packet
-            trace_path: The parsed trace path from the payload
-            parsed_data: The parsed trace data
+            parsed_data: Full parse result from TraceHandler
 
         Returns:
             A dictionary containing the packet record
         """
-        # Format trace path for display
-        trace_path_bytes = [f"{h:02X}" for h in trace_path[:8]]
-        if len(trace_path) > 8:
+        trace_hops: List[bytes] = parsed_data.get("trace_hops") or []
+        legacy = parsed_data.get("trace_path") or []
+
+        trace_path_bytes = [h.hex().upper() for h in trace_hops[:8]]
+        if len(trace_hops) > 8:
             trace_path_bytes.append("...")
         path_hash = "[" + ", ".join(trace_path_bytes) + "]"
 
-        # Extract SNR information from the path
+        # Extract SNR information from the path (one SNR byte per hop along trace)
         path_snrs = []
         path_snr_details = []
-        for i in range(packet.path_len):
-            if i < len(packet.path):
-                snr_val = packet.path[i]
-                snr_db = snr_register_to_db(snr_val)
-                path_snrs.append(f"{snr_val}({snr_db:.1f}dB)")
+        for i in range(len(packet.path)):
+            snr_val = packet.path[i]
+            snr_db = snr_register_to_db(snr_val)
+            path_snrs.append(f"{snr_val}({snr_db:.1f}dB)")
 
-                # Add detailed SNR info if we have the corresponding hash
-                if i < len(trace_path):
-                    path_snr_details.append({
-                        "hash": f"{trace_path[i]:02X}",
+            if i < len(trace_hops):
+                path_snr_details.append(
+                    {
+                        "hash": trace_hops[i].hex().upper(),
                         "snr_raw": snr_val,
-                        "snr_db": snr_db
-                    })
+                        "snr_db": snr_db,
+                    }
+                )
+            elif i < len(legacy):
+                path_snr_details.append(
+                    {
+                        "hash": f"{legacy[i]:02X}",
+                        "snr_raw": snr_val,
+                        "snr_db": snr_db,
+                    }
+                )
 
         return {
             "timestamp": time.time(),
-            "header": f"0x{packet.header:02X}" if hasattr(packet, "header") and packet.header is not None else None,
-            "payload": packet.payload.hex() if hasattr(packet, "payload") and packet.payload else None,
-            "payload_length": len(packet.payload) if hasattr(packet, "payload") and packet.payload else 0,
+            "header": (
+                f"0x{packet.header:02X}"
+                if hasattr(packet, "header") and packet.header is not None
+                else None
+            ),
+            "payload": (
+                packet.payload.hex() if hasattr(packet, "payload") and packet.payload else None
+            ),
+            "payload_length": (
+                len(packet.payload) if hasattr(packet, "payload") and packet.payload else 0
+            ),
             "type": packet.get_payload_type(),  # 0x09 for trace
-            "route": packet.get_route_type(),   # Should be direct (1)
+            "route": packet.get_route_type(),  # Should be direct (1)
             "length": len(packet.payload or b""),
             "rssi": getattr(packet, "rssi", 0),
             "snr": getattr(packet, "snr", 0.0),
-            "score": self.repeater_handler.calculate_packet_score(
-                getattr(packet, "snr", 0.0),
-                len(packet.payload or b""),
-                self.repeater_handler.radio_config.get("spreading_factor", 8)
-            ) if self.repeater_handler else 0.0,
+            "score": (
+                self.repeater_handler.calculate_packet_score(
+                    getattr(packet, "snr", 0.0),
+                    len(packet.payload or b""),
+                    self.repeater_handler.radio_config.get("spreading_factor", 8),
+                )
+                if self.repeater_handler
+                else 0.0
+            ),
             "tx_delay_ms": 0,
             "transmitted": False,
             "is_duplicate": False,
@@ -150,69 +243,77 @@ class TraceHelper:
             "path_hash": path_hash,
             "src_hash": None,
             "dst_hash": None,
-            "original_path": [f"{h:02X}" for h in trace_path],
+            "original_path": [h.hex() for h in trace_hops],
             "forwarded_path": None,
             # Add trace-specific SNR path information
             "path_snrs": path_snrs,  # ["58(14.5dB)", "19(4.8dB)"]
-            "path_snr_details": path_snr_details,  # [{"hash": "29", "snr_raw": 58, "snr_db": 14.5}]
+            "path_snr_details": path_snr_details,
             "is_trace": True,
             "raw_packet": packet.write_to().hex() if hasattr(packet, "write_to") else None,
         }
 
-    def _extract_path_info(self, packet, trace_path: list) -> tuple:
+    def _extract_path_info(self, packet, parsed_data: dict) -> tuple:
         """
         Extract SNR and hash information from the packet path.
 
-        Args:
-            packet: The trace packet
-            trace_path: The parsed trace path from the payload
-
         Returns:
-            A tuple of (path_snrs, path_hashes) lists
+            A tuple of (path_snrs, path_hashes) display lists
         """
+        trace_hops: List[bytes] = parsed_data.get("trace_hops") or []
         path_snrs = []
         path_hashes = []
 
-        for i in range(packet.path_len):
+        for i in range(len(packet.path)):
             if i < len(packet.path):
                 snr_val = packet.path[i]
                 snr_db = snr_register_to_db(snr_val)
                 path_snrs.append(f"{snr_val}({snr_db:.1f}dB)")
 
-            if i < len(trace_path):
-                path_hashes.append(f"0x{trace_path[i]:02x}")
+            if i < len(trace_hops):
+                path_hashes.append(f"0x{trace_hops[i].hex()}")
 
         return path_snrs, path_hashes
 
-    def _should_forward_trace(self, packet, trace_path: list, trace_path_len: int) -> bool:
+    def _should_forward_trace(
+        self, packet, trace_bytes: bytes, flags: int, hash_width: int
+    ) -> bool:
         """
-        Determine if this node should forward the trace packet.
-        Uses the same logic as the original working implementation.
-
-        Args:
-            packet: The trace packet
-            trace_path: The parsed trace path from the payload
-            trace_path_len: The length of the trace path
-
-        Returns:
-            True if the packet should be forwarded, False otherwise
+        Mesh.cpp TRACE branch: forward if offset < len and next hash matches identity.
+        offset = pkt->path_len<<path_sz uses SNR count in packet.path (len(packet.path)).
         """
-        # Use the exact logic from the original working code
-        return (packet.path_len < trace_path_len and 
-                len(trace_path) > packet.path_len and
-                trace_path[packet.path_len] == self.local_hash and
-                self.repeater_handler and not self.repeater_handler.is_duplicate(packet))
+        if not trace_bytes or hash_width <= 0:
+            return False
+        snr_count = len(packet.path)
+        byte_off = snr_count * hash_width
+        if byte_off >= len(trace_bytes):
+            return False
 
-    async def _forward_trace_packet(self, packet, trace_path_len: int) -> None:
+        next_hop = trace_bytes[byte_off : byte_off + hash_width]
+        if len(next_hop) != hash_width:
+            return False
+
+        pubkey_pfx = self._pubkey_prefix(hash_width)
+        if len(pubkey_pfx) >= hash_width:
+            match = next_hop == pubkey_pfx[:hash_width]
+        else:
+            match = hash_width == 1 and next_hop[0] == (self.local_hash & 0xFF)
+
+        if not match:
+            return False
+        if not self.repeater_handler:
+            return False
+        return not self.repeater_handler.is_duplicate(packet)
+
+    async def _forward_trace_packet(self, packet, num_hops: int) -> None:
         """
         Forward a trace packet by appending SNR and sending via injection.
-        
+
         Args:
             packet: The trace packet to forward
-            trace_path_len: The length of the trace path
+            num_hops: Total hops in trace path (for logging)
         """
         # Update the packet record to show it will be transmitted
-        if self.repeater_handler and hasattr(self.repeater_handler, 'recent_packets'):
+        if self.repeater_handler and hasattr(self.repeater_handler, "recent_packets"):
             packet_hash = packet.calculate_packet_hash().hex().upper()[:16]
             for record in reversed(self.repeater_handler.recent_packets):
                 if record.get("packet_hash") == packet_hash:
@@ -242,7 +343,8 @@ class TraceHelper:
         packet.path_len += 1
 
         logger.info(
-            f"Forwarding trace, stored SNR {current_snr:.1f}dB at position {packet.path_len - 1}"
+            f"Forwarding trace ({num_hops} hop path), stored SNR {current_snr:.1f}dB "
+            f"at SNR index {packet.path_len - 1}"
         )
 
         # Inject packet into router for proper routing and transmission
@@ -251,21 +353,69 @@ class TraceHelper:
         else:
             logger.warning("No packet injector available - trace packet not forwarded")
 
-    def _log_no_forward_reason(self, packet, trace_path: list, trace_path_len: int) -> None:
-        """
-        Log the reason why a trace packet was not forwarded.
+    def _log_no_forward_reason(self, packet, trace_bytes: bytes, hash_width: int) -> None:
+        """Log the reason why this node did not forward the trace."""
+        if self.repeater_handler and self.repeater_handler.is_duplicate(packet):
+            logger.info("Duplicate packet, ignoring")
+            return
+
+        snr_count = len(packet.path)
+        if not trace_bytes or hash_width <= 0:
+            logger.info("Trace: empty path or invalid hash width")
+            return
+
+        if snr_count * hash_width >= len(trace_bytes):
+            logger.info("Trace completed (reached end of path)")
+            return
+
+        byte_off = snr_count * hash_width
+        next_hop = trace_bytes[byte_off : byte_off + hash_width]
+        pubkey_pfx = self._pubkey_prefix(hash_width)
+        if len(next_hop) == hash_width and len(pubkey_pfx) >= hash_width:
+            if next_hop != pubkey_pfx[:hash_width]:
+                logger.info(f"Not our turn (next hop: 0x{next_hop.hex()})")
+                return
+        elif hash_width == 1 and next_hop:
+            if (next_hop[0] & 0xFF) != (self.local_hash & 0xFF):
+                logger.info(f"Not our turn (next hop: 0x{next_hop.hex()})")
+                return
+
+        logger.info("Trace: not forwarded (internal)")
+
+    def register_ping(self, tag: int, target_hash: int) -> asyncio.Event:
+        """Register a ping request and return an event to wait on.
 
         Args:
-            packet: The trace packet
-            trace_path: The parsed trace path from the payload
-            trace_path_len: The length of the trace path
+            tag: The unique trace tag for this ping
+            target_hash: The hash of the target node
+
+        Returns:
+            asyncio.Event that will be set when response is received
         """
-        if packet.path_len >= trace_path_len:
-            logger.info("Trace completed (reached end of path)")
-        elif len(trace_path) <= packet.path_len:
-            logger.info("Path index out of bounds")
-        elif trace_path[packet.path_len] != self.local_hash:
-            expected_hash = trace_path[packet.path_len] if packet.path_len < len(trace_path) else None
-            logger.info(f"Not our turn (next hop: 0x{expected_hash:02x})")
-        elif self.repeater_handler and self.repeater_handler.is_duplicate(packet):
-            logger.info("Duplicate packet, ignoring")
+        event = asyncio.Event()
+        self.pending_pings[tag] = {
+            "event": event,
+            "result": None,
+            "target": target_hash,
+            "sent_at": time.time(),
+        }
+        logger.debug(f"Registered ping with tag {tag} for target 0x{target_hash:02x}")
+        return event
+
+    def cleanup_stale_pings(self, max_age_seconds: int = 30):
+        """Remove pending pings older than max_age_seconds.
+
+        Args:
+            max_age_seconds: Maximum age in seconds before a ping is considered stale
+        """
+        current_time = time.time()
+        stale_tags = [
+            tag
+            for tag, info in self.pending_pings.items()
+            if current_time - info["sent_at"] > max_age_seconds
+        ]
+        for tag in stale_tags:
+            self.pending_pings.pop(tag)
+            logger.debug(f"Cleaned up stale ping with tag {tag}")
+        if stale_tags:
+            logger.info(f"Cleaned up {len(stale_tags)} stale ping(s)")

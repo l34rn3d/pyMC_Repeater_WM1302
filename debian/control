@@ -1,0 +1,43 @@
+Source: pymc-repeater
+Section: net
+Priority: optional
+Maintainer: Lloyd <lloyd@rightup.co.uk>
+Build-Depends: debhelper-compat (= 13),
+               dh-python,
+               python3-all,
+               python3-setuptools,
+               python3-setuptools-scm,
+               python3-wheel,
+               python3-pip,
+               python3-yaml,
+               python3-cherrypy3,
+               python3-paho-mqtt,
+               python3-psutil,
+               git
+Standards-Version: 4.6.2
+Homepage: https://github.com/rightup/pyMC_Repeater
+X-Python3-Version: >= 3.8
+
+Package: pymc-repeater
+Architecture: all
+Depends: ${python3:Depends},
+         ${misc:Depends},
+         python3-yaml,
+         python3-cherrypy3,
+         python3-paho-mqtt,
+         python3-psutil,
+         python3-jwt,
+         python3-pip,
+         python3-rrdtool,
+         libffi-dev,
+         jq
+Recommends: python3-periphery,
+            python3-spidev
+Description: PyMC Repeater Daemon
+ A mesh networking repeater daemon for LoRa devices.
+ .
+ This package provides the pymc-repeater service for managing
+ mesh network repeater functionality with a web interface.
+ .
+ Note: This package will install pymc_core, cherrypy-cors, and ws4py
+ from PyPI during postinst as they are not available in Debian repos.

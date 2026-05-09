@@ -7,6 +7,8 @@ __pycache__/
 *.so
 .Python
 build/
+.pybuild/
+repeater/_version.py
 develop-eggs/
 dist/
 downloads/
@@ -23,9 +25,16 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+DEBIAN/
+debian/files
+debian/.debhelper/
+debian/pymc-repeater/
+debian/pymc-repeater.debhelper.log
+debian/pymc-repeater.substvars
 
 # Virtual environments
 .venv/
+.venv_new/
 env/
 ENV/
 
@@ -43,9 +52,16 @@ htmlcov/
 
 # Config
 config.yaml
+config.yaml.backup
 identity.json
+
+# Data
+data/
 
 # Logs
 *.log
 .DS_Store
-sx1302_hal/
+syncpi.sh
+
+# Docker
+/data
