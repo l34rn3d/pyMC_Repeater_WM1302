@@ -189,8 +189,10 @@ build_sx1302_hal() {
         return 0
     fi
 
-    echo ">>> Building SX1302 HAL..."
-    (cd "$hal_dir" && make clean && make all)
+    echo ">>> Building SX1302 HAL libraries..."
+    (cd "$hal_dir" && make clean)
+    (cd "$hal_dir/libtools" && make all)
+    (cd "$hal_dir/libloragw" && make libloragw.a)
 
     (cd "$hal_dir/libloragw" && gcc -shared -fPIC -o libloragw.so \
         -Wl,--whole-archive \
@@ -200,7 +202,7 @@ build_sx1302_hal() {
         ../libtools/libbase64.a \
         -Wl,--no-whole-archive)
 
-    echo "    ✓ SX1302 HAL built"
+    echo "    ✓ SX1302 HAL libraries built"
 }
 
 # Main menu
