@@ -513,40 +513,58 @@ class APIEndpoints:
                 if "preamble_length" in hw_config:
                     config_yaml["radio"]["preamble_length"] = hw_config.get("preamble_length", 17)
 
-                if "sx1262" not in config_yaml:
-                    config_yaml["sx1262"] = {}
-                if "bus_id" in hw_config:
-                    config_yaml["sx1262"]["bus_id"] = hw_config.get("bus_id", 0)
-                if "cs_id" in hw_config:
-                    config_yaml["sx1262"]["cs_id"] = hw_config.get("cs_id", 0)
-                if "reset_pin" in hw_config:
-                    config_yaml["sx1262"]["reset_pin"] = hw_config.get("reset_pin", 22)
-                if "busy_pin" in hw_config:
-                    config_yaml["sx1262"]["busy_pin"] = hw_config.get("busy_pin", 17)
-                if "irq_pin" in hw_config:
-                    config_yaml["sx1262"]["irq_pin"] = hw_config.get("irq_pin", 16)
-                if "txen_pin" in hw_config:
-                    config_yaml["sx1262"]["txen_pin"] = hw_config.get("txen_pin", -1)
-                if "rxen_pin" in hw_config:
-                    config_yaml["sx1262"]["rxen_pin"] = hw_config.get("rxen_pin", -1)
-                if "en_pin" in hw_config:
-                    config_yaml["sx1262"]["en_pin"] = hw_config.get("en_pin", -1)
-                if "en_pins" in hw_config:
-                    config_yaml["sx1262"]["en_pins"] = hw_config.get("en_pins", [])
-                if "cs_pin" in hw_config:
-                    config_yaml["sx1262"]["cs_pin"] = hw_config.get("cs_pin", -1)
-                if "txled_pin" in hw_config:
-                    config_yaml["sx1262"]["txled_pin"] = hw_config.get("txled_pin", -1)
-                if "rxled_pin" in hw_config:
-                    config_yaml["sx1262"]["rxled_pin"] = hw_config.get("rxled_pin", -1)
-                if "use_dio3_tcxo" in hw_config:
-                    config_yaml["sx1262"]["use_dio3_tcxo"] = hw_config.get("use_dio3_tcxo", False)
-                if "dio3_tcxo_voltage" in hw_config:
-                    config_yaml["sx1262"]["dio3_tcxo_voltage"] = hw_config.get("dio3_tcxo_voltage", 1.8)
-                if "use_dio2_rf" in hw_config:
-                    config_yaml["sx1262"]["use_dio2_rf"] = hw_config.get("use_dio2_rf", False)
-                if "is_waveshare" in hw_config:
-                    config_yaml["sx1262"]["is_waveshare"] = hw_config.get("is_waveshare", False)
+                if config_yaml.get("radio_type") in ("sx1302", "wm1302"):
+                    if "sx1302" not in config_yaml:
+                        config_yaml["sx1302"] = {}
+                    config_yaml["sx1302"]["com_path"] = hw_config.get("com_path", "/dev/spidev0.0")
+                    if hw_config.get("sx1261_spi_path"):
+                        config_yaml["sx1302"]["sx1261_spi_path"] = hw_config.get(
+                            "sx1261_spi_path"
+                        )
+                else:
+                    if "sx1262" not in config_yaml:
+                        config_yaml["sx1262"] = {}
+                    if "bus_id" in hw_config:
+                        config_yaml["sx1262"]["bus_id"] = hw_config.get("bus_id", 0)
+                    if "cs_id" in hw_config:
+                        config_yaml["sx1262"]["cs_id"] = hw_config.get("cs_id", 0)
+                    if "reset_pin" in hw_config:
+                        config_yaml["sx1262"]["reset_pin"] = hw_config.get("reset_pin", 22)
+                    if "busy_pin" in hw_config:
+                        config_yaml["sx1262"]["busy_pin"] = hw_config.get("busy_pin", 17)
+                    if "irq_pin" in hw_config:
+                        config_yaml["sx1262"]["irq_pin"] = hw_config.get("irq_pin", 16)
+                    if "txen_pin" in hw_config:
+                        config_yaml["sx1262"]["txen_pin"] = hw_config.get("txen_pin", -1)
+                    if "rxen_pin" in hw_config:
+                        config_yaml["sx1262"]["rxen_pin"] = hw_config.get("rxen_pin", -1)
+                    if "en_pin" in hw_config:
+                        config_yaml["sx1262"]["en_pin"] = hw_config.get("en_pin", -1)
+                    if "en_pins" in hw_config:
+                        config_yaml["sx1262"]["en_pins"] = hw_config.get("en_pins", [])
+                    if "cs_pin" in hw_config:
+                        config_yaml["sx1262"]["cs_pin"] = hw_config.get("cs_pin", -1)
+                    if "txled_pin" in hw_config:
+                        config_yaml["sx1262"]["txled_pin"] = hw_config.get("txled_pin", -1)
+                    if "rxled_pin" in hw_config:
+                        config_yaml["sx1262"]["rxled_pin"] = hw_config.get("rxled_pin", -1)
+                    if "use_dio3_tcxo" in hw_config:
+                        config_yaml["sx1262"]["use_dio3_tcxo"] = hw_config.get(
+                            "use_dio3_tcxo", False
+                        )
+                    if "dio3_tcxo_voltage" in hw_config:
+                        config_yaml["sx1262"]["dio3_tcxo_voltage"] = hw_config.get(
+                            "dio3_tcxo_voltage", 1.8
+                        )
+                    if "use_dio2_rf" in hw_config:
+                        config_yaml["sx1262"]["use_dio2_rf"] = hw_config.get(
+                            "use_dio2_rf", False
+                        )
+                    if "is_waveshare" in hw_config:
+                        config_yaml["sx1262"]["is_waveshare"] = hw_config.get(
+                            "is_waveshare", False
+                        )
+
             # Write updated config
             with open(self._config_path, "w") as f:
                 yaml.dump(config_yaml, f, default_flow_style=False, sort_keys=False)

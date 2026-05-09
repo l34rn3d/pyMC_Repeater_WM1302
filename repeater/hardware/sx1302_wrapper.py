@@ -150,10 +150,14 @@ class SX1302Radio:
             import os
             script_candidates = [
                 "/opt/pymc_repeater/sx1302_hal/libloragw/reset_lgw.sh",
+                "/opt/pymc_repeater/sx1302_hal/tools/reset_lgw.sh",
                 os.path.abspath(
                     os.path.join(
                         os.path.dirname(__file__), "../../sx1302_hal/libloragw/reset_lgw.sh"
                     )
+                ),
+                os.path.abspath(
+                    os.path.join(os.path.dirname(__file__), "../../sx1302_hal/tools/reset_lgw.sh")
                 ),
             ]
             script_path = next(

@@ -322,6 +322,16 @@
       "use_dio2_rf": false,
       "use_dio3_tcxo": true,
       "preamble_length": 17
+    },
+    "wm1302": {
+      "name": "WM1302 / SX1302 Concentrator",
+      "description": "SX1302 concentrator on SPI. Requires the bundled sx1302_hal to be built during install.",
+      "radio_type": "sx1302",
+      "hardware_type": "sx1302",
+      "com_path": "/dev/spidev0.0",
+      "sx1261_spi_path": "/dev/spidev0.1",
+      "tx_power": 26,
+      "preamble_length": 17
     }
   }
 }

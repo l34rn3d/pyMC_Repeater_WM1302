@@ -179,6 +179,30 @@ get_status_display() {
     fi
 }
 
+# Build the SX1302 HAL from the source tree copied into /opt. The Python
+# bindings load libloragw.so directly, so create the shared library after make.
+build_sx1302_hal() {
+    local hal_dir="$INSTALL_DIR/sx1302_hal"
+
+    if [ ! -d "$hal_dir" ]; then
+        echo "    - SX1302 HAL source not found, skipping"
+        return 0
+    fi
+
+    echo ">>> Building SX1302 HAL..."
+    (cd "$hal_dir" && make clean && make all)
+
+    (cd "$hal_dir/libloragw" && gcc -shared -fPIC -o libloragw.so \
+        -Wl,--whole-archive \
+        libloragw.a \
+        ../libtools/libtinymt32.a \
+        ../libtools/libparson.a \
+        ../libtools/libbase64.a \
+        -Wl,--no-whole-archive)
+
+    echo "    ✓ SX1302 HAL built"
+}
+
 # Main menu
 show_main_menu() {
     local status=$(get_status_display)
@@ -370,6 +394,10 @@ install_repeater() {
     cp "$SCRIPT_DIR/pymc-repeater.service" "$INSTALL_DIR/" 2>/dev/null || true
     cp "$SCRIPT_DIR/radio-settings.json" /var/lib/pymc_repeater/ 2>/dev/null || true
     cp "$SCRIPT_DIR/radio-presets.json" /var/lib/pymc_repeater/ 2>/dev/null || true
+    if [ -d "$SCRIPT_DIR/sx1302_hal" ]; then
+        rm -rf "$INSTALL_DIR/sx1302_hal"
+        cp -r "$SCRIPT_DIR/sx1302_hal" "$INSTALL_DIR/"
+    fi
 
     echo "45"; echo "# Installing configuration..."
     cp "$SCRIPT_DIR/config.yaml.example" "$CONFIG_DIR/config.yaml.example"
@@ -387,6 +415,9 @@ install_repeater() {
         udevadm control --reload-rules 2>/dev/null || true
         udevadm trigger 2>/dev/null || true
     fi
+
+    echo "62"; echo "# Building SX1302 HAL..."
+    build_sx1302_hal
 
     echo "65"; echo "# Setting permissions..."
     # Venv stays root-owned (pip runs as root); service user only needs read+execute
